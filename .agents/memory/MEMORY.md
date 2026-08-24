@@ -2,3 +2,4 @@
 - [Axi MT5 integration boundary](axi-mt5-integration.md) — broker work stays behind an explicit MT5 bridge adapter; LIVE execution begins disabled and requires a separate approval stage.
 - [OpenAPI codegen compatibility](openapi-integer-codegen.md) — generated Zod schemas have workspace-specific integer and parameter-export compatibility constraints.
 - [Market-news verification evidence](market-news-verification-evidence.md) — source corroboration is evidence-backed only when publisher URLs, timestamps, and direct event matches are verified.
+- [Ephemeral PostgreSQL validation](ephemeral-postgres-validation.md) — local initdb clusters need an explicit test database before schema push.
