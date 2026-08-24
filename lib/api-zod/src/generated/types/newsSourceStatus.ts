@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type NewsFeedSourceStatus = typeof NewsFeedSourceStatus[keyof typeof NewsFeedSourceStatus];
+export type NewsSourceStatus = typeof NewsSourceStatus[keyof typeof NewsSourceStatus];
 
 
-export const NewsFeedSourceStatus = {
+export const NewsSourceStatus = {
   live: 'live',
-  partial: 'partial',
   degraded: 'degraded',
 } as const;

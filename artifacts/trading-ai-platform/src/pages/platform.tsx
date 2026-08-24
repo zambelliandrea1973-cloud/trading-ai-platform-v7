@@ -1,11 +1,25 @@
 import { useState, type FormEvent, useMemo } from 'react';
-import { ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleDot, Clock3, Gauge, Info, LockKeyhole, Pause, Play, Plus, Radio, RefreshCw, ShieldAlert, SlidersHorizontal, Target, Timer, Wifi } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleDot, Clock3, ExternalLink, Gauge, Info, LockKeyhole, Pause, Play, Plus, Radio, RefreshCw, ShieldAlert, SlidersHorizontal, Target, Timer, Wifi } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
 import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, getGetBrokerStatusQueryKey, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams } from '@workspace/api-client-react';
 import { Badge, MarketRow, Metric, Notice, OpportunityCard, PageButton, PageHeader, SectionLabel, StateMessage } from '@/components/common';
 import { useI18n } from '@/lib/i18n';
 
 function useMockOr<T>(data: T | undefined, mock: T) { return data ?? mock; }
+
+function formatNewsTimestamp(value: string, locale: 'it' | 'en') {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale === 'it' ? 'it-IT' : 'en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  }).format(date) + ' UTC';
+}
+
+function verificationTone(status: 'confirmed' | 'contradicted' | 'duplicate' | 'standalone') {
+  return status === 'confirmed' ? 'positive' : status === 'contradicted' ? 'negative' : status === 'duplicate' ? 'amber' : 'neutral';
+}
 
 export function DashboardPage() {
   const { t } = useI18n();
@@ -101,7 +115,7 @@ export function AssetPage() {
     {query.isLoading ? <StateMessage kind="loading" title={t('markets.loading')} body="" /> : query.isError && !asset ? <StateMessage kind="error" title={t('error.title')} body={t('error.desc')} onRetry={() => query.refetch()} /> : asset ? <>
       <div className="mb-6 grid gap-4 lg:grid-cols-[1.05fr_1fr_1fr]">
         <div className="panel p-5"><p className="eyebrow">{t('asset.lastPrice')}</p><p className="mono mt-3 text-4xl text-foreground">{asset.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p><div className="mt-5 flex items-center gap-2"><Badge tone={asset.decision.toLowerCase().includes('buy') ? 'positive' : asset.decision.toLowerCase().includes('sell') ? 'negative' : 'amber'}>{asset.decision}</Badge><span className="text-xs text-muted-foreground">{t('asset.modelConfidence')} {asset.confidence}%</span></div></div>
-        <div className="panel p-5 lg:col-span-2"><div className="flex items-start justify-between"><div><p className="eyebrow">{t('asset.composite')}</p><h2 className="display mt-2 text-2xl font-bold text-foreground">{asset.decision === 'BUY' ? t('asset.consideredEntry') : t('asset.wait')}</h2></div><Badge tone={asset.riskLevel.toLowerCase().includes('high') || asset.riskLevel.toLowerCase().includes('alto') ? 'negative' : 'positive'}>{t('asset.riskLevel')} {asset.riskLevel.toLowerCase()}</Badge></div><p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{asset.explanation}</p><div className="mt-5 flex items-center gap-4 border-t border-border pt-4"><span className="eyebrow">{t('asset.regime')}</span><span className="mono text-xs text-primary">{asset.regime}</span><span className="ml-auto mono text-xs text-muted-foreground">{t('common.confidence').toLowerCase()} {asset.confidence}%</span></div></div>
+        <div className="panel p-5 lg:col-span-2"><div className="flex items-start justify-between"><div><p className="eyebrow">{t('asset.composite')}</p><h2 className="display mt-2 text-2xl font-bold text-foreground">{asset.decision === 'BUY' ? t('asset.consideredEntry') : t('asset.wait')}</h2></div><Badge tone={asset.riskLevel.toLowerCase().includes('high') || asset.riskLevel.toLowerCase().includes('alto') ? 'negative' : 'positive'}>{t('asset.riskLevel')} {asset.riskLevel.toLowerCase()}</Badge></div><p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{asset.explanation}</p><div className="mt-4"><Notice tone="teal"><span>{t('news.paperContext')}</span></Notice></div><div className="mt-5 flex items-center gap-4 border-t border-border pt-4"><span className="eyebrow">{t('asset.regime')}</span><span className="mono text-xs text-primary">{asset.regime}</span><span className="ml-auto mono text-xs text-muted-foreground">{t('common.confidence').toLowerCase()} {asset.confidence}%</span></div></div>
       </div>
 
       <SectionLabel aside={<Badge tone="neutral">{t('asset.directional')}</Badge>}>{t('asset.detail')}</SectionLabel>
@@ -138,10 +152,16 @@ export function AssetPage() {
         {asset.historicalPrecedents.length > 0 ? asset.historicalPrecedents.map((prec, idx) => <div key={idx} className="panel p-5 md:p-6" data-testid={`precedent-${idx}`}><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2 mb-2"><Badge tone="neutral">{t('asset.precedent.match')}: {prec.matchScore}%</Badge><span className="mono text-xs text-muted-foreground">{prec.date}</span></div><h3 className="text-lg font-bold text-foreground">{prec.event}</h3></div><Badge tone="neutral">{t('asset.precedent.trigger')}: {prec.trigger}</Badge></div><div className="mt-4 grid gap-4 md:grid-cols-2"><div className="rounded-md bg-secondary/30 p-4"><span className="eyebrow block mb-1 text-primary">{t('asset.precedent.takeaway')}</span><p className="text-xs text-muted-foreground">{prec.takeaway}</p></div><div className="rounded-md bg-secondary/30 p-4"><span className="eyebrow block mb-1 text-destructive">{t('asset.precedent.caveat')}</span><p className="text-xs text-muted-foreground">{prec.caveat}</p></div></div><div className="mt-5"><span className="eyebrow block mb-3">{t('asset.precedent.outcomes')}</span><div className="grid grid-cols-3 gap-3">{prec.outcomes.map((outcome, oIdx) => <div key={oIdx} className="rounded-md border border-border p-3 flex flex-col justify-between"><span className="eyebrow block mb-2">{outcome.horizon}</span><div className="flex items-end justify-between"><div><span className="text-[10px] text-muted-foreground block">{t('asset.precedent.medianReturn')}</span><span className={`mono text-lg ${outcome.medianReturn >= 0 ? 'text-accent' : 'text-destructive'}`}>{outcome.medianReturn > 0 ? '+' : ''}{outcome.medianReturn}%</span></div><div className="text-right"><span className="text-[10px] text-muted-foreground block">{t('asset.precedent.positiveRate')}</span><span className="mono text-sm text-foreground">{outcome.positiveRate}%</span></div></div></div>)}</div></div></div>) : <Notice><span>{t('asset.noPrecedents')}</span></Notice>}
       </div>
 
-      <SectionLabel aside={<Badge tone={asset.newsSourceStatus === 'live' ? 'positive' : 'amber'}>{t('asset.newsSource')}: {asset.newsSourceStatus === 'live' ? t('news.source.live') : asset.newsSourceStatus === 'contextual' ? t('news.source.contextual') : t('news.source.degraded')}</Badge>}>{t('asset.news')}</SectionLabel>
+      <SectionLabel aside={<Badge tone={asset.newsSourceStatus === 'live' ? 'positive' : 'amber'}>{t('asset.newsSource')}: {asset.newsSourceStatus === 'live' ? t('news.source.live') : asset.newsSourceStatus === 'partial' ? t('news.source.partial') : asset.newsSourceStatus === 'contextual' ? t('news.source.contextual') : t('news.source.degraded')}</Badge>}>{t('asset.news')}</SectionLabel>
       <p className="mb-3 mono text-[10px] text-muted-foreground">{asset.newsSourceLabel}</p>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Badge tone={asset.newsSourceCoverage.available === asset.newsSourceCoverage.expected ? 'positive' : 'amber'}>{t('news.sourcesAvailable')}: {asset.newsSourceCoverage.available}/{asset.newsSourceCoverage.expected}</Badge>
+        {asset.newsSources.map((source) => <a href={source.homepageUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 mono text-[9px] uppercase tracking-wider text-muted-foreground hover:border-primary/50 hover:text-primary" key={source.id} data-testid={`asset-news-source-${source.id}`}>{source.label}<ExternalLink size={10} /></a>)}
+      </div>
+      {asset.newsSourceStatus !== 'live' && <div className="mb-3"><Notice><span>{t('news.reducedAvailability')}</span></Notice></div>}
+      {asset.newsConflicts.length > 0 && <div className="mb-3"><Notice tone="negative"><span>{t('news.conflicts')}: {asset.newsConflicts.map((conflict) => conflict.theme).join(', ')}.</span></Notice></div>}
       <div className="mb-6 grid gap-3 md:grid-cols-2">
-        {asset.news.length > 0 ? asset.news.map((item) => <Link href="/news" key={item.id} className="panel panel-hover block p-4" data-testid={`asset-news-${item.id}`}><div className="flex justify-between items-start mb-2"><span className="mono text-xs text-muted-foreground">{item.publishedAt}</span><Badge tone={item.sentiment === 'supportive' ? 'positive' : item.sentiment === 'adverse' ? 'negative' : 'neutral'}>{item.sentiment === 'supportive' ? t('news.sentiment.supportive') : item.sentiment === 'adverse' ? t('news.sentiment.adverse') : t('news.sentiment.mixed')}</Badge></div><h4 className="text-sm font-semibold text-foreground mb-1">{item.title}</h4><p className="text-xs text-muted-foreground line-clamp-2">{item.summary}</p></Link>) : <Notice><span>{t('asset.noNews')}</span></Notice>}
+        {asset.news.length > 0 ? asset.news.map((item) => <article key={item.id} className="panel panel-hover p-4" data-testid={`asset-news-${item.id}`}><div className="flex flex-wrap justify-between items-start gap-2 mb-2"><div><span className="mono text-xs text-muted-foreground">{formatNewsTimestamp(item.publishedAt, locale)}</span><p className="mt-1 text-xs font-semibold text-accent">{item.source}</p></div><div className="flex gap-1"><Badge tone={item.sentiment === 'supportive' ? 'positive' : item.sentiment === 'adverse' ? 'negative' : 'neutral'}>{item.sentiment === 'supportive' ? t('news.sentiment.supportive') : item.sentiment === 'adverse' ? t('news.sentiment.adverse') : t('news.sentiment.mixed')}</Badge><Badge tone={verificationTone(item.verification.status)}>{item.verification.status === 'confirmed' ? t('news.verification.confirmed') : item.verification.status === 'contradicted' ? t('news.verification.contradicted') : item.verification.status === 'duplicate' ? t('news.verification.duplicate') : t('news.verification.standalone')}</Badge></div></div><Link href="/news" className="text-sm font-semibold text-foreground hover:text-primary">{item.title}</Link><p className="mt-1 text-xs text-muted-foreground line-clamp-2">{item.summary}</p><a href={item.canonicalUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline" data-testid={`asset-news-citation-${item.id}`}><ExternalLink size={12} />{t('news.openSource')}</a></article>) : <Notice><span>{t('asset.noNews')}</span></Notice>}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
@@ -207,16 +227,32 @@ export function NewsPage() {
           <div className="flex items-center gap-2">
             <Badge tone={feed.sourceStatus === 'live' ? 'positive' : 'amber'}>
               {feed.sourceStatus === 'live' ? <Wifi size={11} className="mr-1 inline" /> : <ShieldAlert size={11} className="mr-1 inline" />}
-              {t('news.sourceStatus')}: {feed.sourceStatus === 'live' ? t('news.source.live') : t('news.source.degraded')}
+              {t('news.sourceStatus')}: {feed.sourceStatus === 'live' ? t('news.source.live') : feed.sourceStatus === 'partial' ? t('news.source.partial') : t('news.source.degraded')}
             </Badge>
             <Badge tone="neutral">
               <Clock3 size={11} className="mr-1 inline" />
-              {t('news.updated')} {feed.updatedAt}
+              {t('news.updated')} {formatNewsTimestamp(feed.updatedAt, locale)}
             </Badge>
           </div>
         )
       }
     />
+    {feed && <section className="mb-6 panel p-4 md:p-5" data-testid="news-verification-summary">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+        <div><SectionLabel>{t('news.verificationTitle')}</SectionLabel><p className="text-xs leading-relaxed text-muted-foreground">{feed.sourceLabel}</p></div>
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={feed.sourceCoverage.available === feed.sourceCoverage.expected ? 'positive' : 'amber'}>{t('news.sourcesAvailable')}: {feed.sourceCoverage.available}/{feed.sourceCoverage.expected}</Badge>
+          <Badge tone={feed.conflicts.length ? 'negative' : 'neutral'}>{t('news.conflicts')}: {feed.conflicts.length}</Badge>
+          <Badge tone={feed.duplicates.length ? 'amber' : 'neutral'}>{t('news.duplicates')}: {feed.duplicates.length}</Badge>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {feed.sources.map((source) => <a key={source.id} href={source.homepageUrl} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs ${source.status === 'live' ? 'border-accent/30 bg-accent/5 text-accent' : 'border-border bg-secondary/40 text-muted-foreground'}`} data-testid={`news-source-${source.id}`}><span className={`h-1.5 w-1.5 rounded-full ${source.status === 'live' ? 'bg-accent' : 'bg-muted-foreground'}`} />{source.label} · {source.itemCount}<ExternalLink size={12} /></a>)}
+      </div>
+      {feed.sourceStatus !== 'live' && <div className="mt-4"><Notice><span>{t('news.reducedAvailability')}</span></Notice></div>}
+      {feed.conflicts.length > 0 && <div className="mt-3"><Notice tone="negative"><span>{t('news.conflicts')}: {feed.conflicts.map((conflict) => `${conflict.theme} (${conflict.sources.join(' / ')})`).join('; ')}.</span></Notice></div>}
+      {feed.duplicates.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{t('news.duplicates')}: {feed.duplicates.length} · {t('news.duplicateNote')}</p>}
+    </section>}
     <div className="mb-6 grid gap-4 lg:grid-cols-2">
       <div>
         <span className="eyebrow block mb-2">{t('news.theme')}</span>
@@ -264,7 +300,7 @@ export function NewsPage() {
           <article className="panel panel-hover p-5" key={item.id} data-testid={`news-item-${item.id}`}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <span className="mono text-xs text-muted-foreground">{item.publishedAt}</span>
+                <span className="mono text-xs text-muted-foreground">{formatNewsTimestamp(item.publishedAt, locale)}</span>
                 <span className="text-xs font-semibold text-muted-foreground">•</span>
                 <span className="text-xs font-semibold text-accent">{item.source}</span>
               </div>
@@ -273,15 +309,18 @@ export function NewsPage() {
                   {item.sentiment === 'supportive' ? t('news.sentiment.supportive') : item.sentiment === 'adverse' ? t('news.sentiment.adverse') : t('news.sentiment.mixed')}
                 </Badge>
                 <Badge tone="amber">{item.theme === 'Macro / Tassi' ? t('news.catMacroRates') : item.theme === 'Azionario' ? t('news.catEquities') : item.theme === 'FX / Macro' ? t('news.catFxMacro') : item.theme === 'Materie prime' ? t('news.catCommodities') : item.theme}</Badge>
+                <Badge tone={verificationTone(item.verification.status)}>{item.verification.status === 'confirmed' ? t('news.verification.confirmed') : item.verification.status === 'contradicted' ? t('news.verification.contradicted') : item.verification.status === 'duplicate' ? t('news.verification.duplicate') : t('news.verification.standalone')}</Badge>
               </div>
             </div>
             <h2 className="text-lg font-bold text-foreground">{item.title}</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
+            <a href={item.canonicalUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline" data-testid={`news-citation-${item.id}`}><ExternalLink size={13} />{t('news.openSource')}</a>
 
             <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
               <div>
                 <span className="eyebrow block mb-2">{t('news.impactAnalysis')}</span>
                 <p className="text-xs leading-relaxed text-muted-foreground">{item.analysis}</p>
+                <p className="mt-3 text-[11px] text-muted-foreground">{item.verification.sourceCount > 1 ? `${t('news.sourcesAvailable')}: ${item.verification.sourceCount}` : t('news.singleSource')}</p>
               </div>
               <div>
                 <span className="eyebrow block mb-2">{t('news.relevance')}</span>

@@ -47,6 +47,7 @@ export type AssetAnalysisDataStatus = typeof AssetAnalysisDataStatus[keyof typeo
 
 export const AssetAnalysisDataStatus = {
   live: 'live',
+  partial: 'partial',
   contextual: 'contextual',
   degraded: 'degraded',
 } as const;
@@ -56,6 +57,7 @@ export type AssetAnalysisNewsSourceStatus = typeof AssetAnalysisNewsSourceStatus
 
 export const AssetAnalysisNewsSourceStatus = {
   live: 'live',
+  partial: 'partial',
   contextual: 'contextual',
   degraded: 'degraded',
 } as const;
@@ -78,10 +80,28 @@ export const NewsItemSentiment = {
   adverse: 'adverse',
 } as const;
 
+export type NewsVerificationStatus = typeof NewsVerificationStatus[keyof typeof NewsVerificationStatus];
+
+
+export const NewsVerificationStatus = {
+  confirmed: 'confirmed',
+  contradicted: 'contradicted',
+  duplicate: 'duplicate',
+  standalone: 'standalone',
+} as const;
+
+export interface NewsVerification {
+  status: NewsVerificationStatus;
+  relatedItemIds: string[];
+  sourceCount: number;
+}
+
 export interface NewsItem {
   id: string;
   publishedAt: string;
   source: string;
+  sourceId: string;
+  canonicalUrl: string;
   title: string;
   summary: string;
   symbols: string[];
@@ -90,6 +110,7 @@ export interface NewsItem {
   sentiment: NewsItemSentiment;
   relevance: number;
   analysis: string;
+  verification: NewsVerification;
 }
 
 export type HistoricalOutcomeHorizon = typeof HistoricalOutcomeHorizon[keyof typeof HistoricalOutcomeHorizon];
@@ -134,6 +155,52 @@ export interface AnalysisRiskLimits {
   limitations: string[];
 }
 
+export type NewsSourceStatus = typeof NewsSourceStatus[keyof typeof NewsSourceStatus];
+
+
+export const NewsSourceStatus = {
+  live: 'live',
+  degraded: 'degraded',
+} as const;
+
+export type NewsSourceKind = typeof NewsSourceKind[keyof typeof NewsSourceKind];
+
+
+export const NewsSourceKind = {
+  live: 'live',
+  curated: 'curated',
+} as const;
+
+export interface NewsSource {
+  id: string;
+  label: string;
+  homepageUrl: string;
+  status: NewsSourceStatus;
+  kind: NewsSourceKind;
+  itemCount: number;
+  lastCheckedAt: string;
+}
+
+export interface NewsSourceCoverage {
+  expected: number;
+  available: number;
+}
+
+export interface NewsConflict {
+  id: string;
+  theme: string;
+  itemIds: string[];
+  sources: string[];
+  description: string;
+}
+
+export interface NewsDuplicate {
+  id: string;
+  canonicalUrl: string;
+  itemIds: string[];
+  sources: string[];
+}
+
 export interface AssetAnalysis {
   symbol: string;
   name: string;
@@ -155,6 +222,10 @@ export interface AssetAnalysis {
   dataStatus: AssetAnalysisDataStatus;
   newsSourceStatus: AssetAnalysisNewsSourceStatus;
   newsSourceLabel: string;
+  newsSources: NewsSource[];
+  newsSourceCoverage: NewsSourceCoverage;
+  newsConflicts: NewsConflict[];
+  newsDuplicates: NewsDuplicate[];
 }
 
 export type NewsFeedSourceStatus = typeof NewsFeedSourceStatus[keyof typeof NewsFeedSourceStatus];
@@ -162,6 +233,7 @@ export type NewsFeedSourceStatus = typeof NewsFeedSourceStatus[keyof typeof News
 
 export const NewsFeedSourceStatus = {
   live: 'live',
+  partial: 'partial',
   degraded: 'degraded',
 } as const;
 
@@ -170,6 +242,10 @@ export interface NewsFeed {
   updatedAt: string;
   sourceStatus: NewsFeedSourceStatus;
   sourceLabel: string;
+  sources: NewsSource[];
+  sourceCoverage: NewsSourceCoverage;
+  conflicts: NewsConflict[];
+  duplicates: NewsDuplicate[];
 }
 
 export interface Dashboard {

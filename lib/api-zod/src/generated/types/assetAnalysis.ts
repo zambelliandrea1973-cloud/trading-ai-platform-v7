@@ -12,7 +12,11 @@ import type { AssetAnalysisIndicators } from './assetAnalysisIndicators';
 import type { AssetAnalysisNewsSourceStatus } from './assetAnalysisNewsSourceStatus';
 import type { BrainScore } from './brainScore';
 import type { HistoricalPrecedent } from './historicalPrecedent';
+import type { NewsConflict } from './newsConflict';
+import type { NewsDuplicate } from './newsDuplicate';
 import type { NewsItem } from './newsItem';
+import type { NewsSource } from './newsSource';
+import type { NewsSourceCoverage } from './newsSourceCoverage';
 
 export interface AssetAnalysis {
   symbol: string;
@@ -35,4 +39,8 @@ export interface AssetAnalysis {
   dataStatus: AssetAnalysisDataStatus;
   newsSourceStatus: AssetAnalysisNewsSourceStatus;
   newsSourceLabel: string;
+  newsSources: NewsSource[];
+  newsSourceCoverage: NewsSourceCoverage;
+  newsConflicts: NewsConflict[];
+  newsDuplicates: NewsDuplicate[];
 }

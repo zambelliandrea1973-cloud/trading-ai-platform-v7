@@ -18,11 +18,14 @@ const markets = [
 type Horizon = "short" | "medium" | "long";
 type Sentiment = "supportive" | "mixed" | "adverse";
 type Locale = "it" | "en";
+type NewsVerificationStatus = "confirmed" | "contradicted" | "duplicate" | "standalone";
 
 type NewsItem = {
   id: string;
   publishedAt: string;
   source: string;
+  sourceId: string;
+  canonicalUrl: string;
   title: string;
   summary: string;
   symbols: string[];
@@ -31,6 +34,36 @@ type NewsItem = {
   sentiment: Sentiment;
   relevance: number;
   analysis: string;
+  verification: {
+    status: NewsVerificationStatus;
+    relatedItemIds: string[];
+    sourceCount: number;
+  };
+};
+
+type NewsSource = {
+  id: string;
+  label: string;
+  homepageUrl: string;
+  status: "live" | "degraded";
+  kind: "live" | "curated";
+  itemCount: number;
+  lastCheckedAt: string;
+};
+
+type NewsConflict = {
+  id: string;
+  theme: string;
+  itemIds: string[];
+  sources: string[];
+  description: string;
+};
+
+type NewsDuplicate = {
+  id: string;
+  canonicalUrl: string;
+  itemIds: string[];
+  sources: string[];
 };
 
 type HistoricalPrecedent = {
@@ -48,7 +81,7 @@ type HistoricalPrecedent = {
   }>;
 };
 
-const newsSeeds: Array<Omit<NewsItem, "id" | "publishedAt"> & { minutesAgo: number }> = [
+const newsSeeds: Array<Omit<NewsItem, "id" | "publishedAt" | "sourceId" | "canonicalUrl" | "verification"> & { minutesAgo: number }> = [
   {
     minutesAgo: 11,
     source: "Vector market desk",
@@ -139,24 +172,43 @@ const englishSeedText: Record<string, Pick<NewsItem, "title" | "summary" | "anal
   },
 };
 
-function getNewsItems(locale: Locale) {
-  const now = Date.now();
-  return newsSeeds.map(({ minutesAgo, ...item }, index) => {
-    const translated = locale === "en" ? englishSeedText[item.title] : undefined;
-    return {
-      ...item,
-      ...translated,
-      id: `snapshot-${index + 1}`,
-      publishedAt: new Date(now - minutesAgo * 60_000).toISOString(),
-    };
-  });
-}
+type NewsSourceConfig = {
+  id: string;
+  label: string;
+  homepageUrl: string;
+  url: string;
+  citationHosts: string[];
+};
+
+const newsSourceConfigs: NewsSourceConfig[] = [
+  {
+    id: "bbc-business",
+    label: "BBC Business",
+    homepageUrl: "https://www.bbc.com/news/business",
+    url: "https://feeds.bbci.co.uk/news/business/rss.xml",
+    citationHosts: ["bbc.com", "bbc.co.uk"],
+  },
+  {
+    id: "cnbc-markets",
+    label: "CNBC Markets",
+    homepageUrl: "https://www.cnbc.com/markets/",
+    url: "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    citationHosts: ["cnbc.com"],
+  },
+];
 
 type NewsSnapshot = {
   items: NewsItem[];
   updatedAt: string;
-  sourceStatus: "live" | "degraded";
+  sourceStatus: "live" | "partial" | "degraded";
   sourceLabel: string;
+  sources: NewsSource[];
+  sourceCoverage: {
+    expected: number;
+    available: number;
+  };
+  conflicts: NewsConflict[];
+  duplicates: NewsDuplicate[];
 };
 
 const cachedNewsSnapshots: Partial<Record<Locale, { expiresAt: number; value: NewsSnapshot }>> = {};
@@ -181,7 +233,7 @@ function classifyLiveHeadline(title: string, summary: string, locale: Locale) {
   const text = `${title} ${summary}`.toLowerCase();
   const symbols = new Set<string>();
   if (/bitcoin|crypto|token|digital asset/.test(text)) symbols.add("BTC/USD");
-  if (/gold|precious metal|bullion/.test(text)) symbols.add("XAU/USD");
+  if (/\bgold\b|precious metal|bullion/.test(text)) symbols.add("XAU/USD");
   if (/(euro.{0,40}dollar|dollar.{0,40}euro|eur\/usd|forex)/.test(text)) symbols.add("EUR/USD");
   if (/nasdaq|semiconductor|technology stocks|tech shares/.test(text)) symbols.add("NAS100");
   if (symbols.size === 0) return undefined;
@@ -208,43 +260,218 @@ function classifyLiveHeadline(title: string, summary: string, locale: Locale) {
   };
 }
 
-async function getNewsSnapshot(locale: Locale): Promise<NewsSnapshot> {
-  const cached = cachedNewsSnapshots[locale];
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+function canonicalUrl(value: string, citationHosts: string[]) {
   try {
-    const response = await fetch("https://feeds.bbci.co.uk/news/business/rss.xml", { signal: AbortSignal.timeout(2_000) });
+    if (!value) return undefined;
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || !citationHosts.some((host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`))) {
+      return undefined;
+    }
+    parsed.hash = "";
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (/^(utm_|ref$|source$)/i.test(key)) parsed.searchParams.delete(key);
+    }
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function headlineTokens(title: string) {
+  const stopWords = new Set(["the", "and", "for", "with", "from", "that", "this", "into", "after", "over", "news", "market", "markets", "dei", "del", "della", "con", "per", "che", "una", "sono", "sul", "nelle"]);
+  return new Set(title.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((word) => word.length > 2 && !stopWords.has(word)));
+}
+
+function similarity(first: Set<string>, second: Set<string>) {
+  const shared = [...first].filter((token) => second.has(token)).length;
+  const total = new Set([...first, ...second]).size;
+  return total ? shared / total : 0;
+}
+
+function shareSymbol(first: NewsItem, second: NewsItem) {
+  return first.symbols.some((symbol) => second.symbols.includes(symbol));
+}
+
+function closeInTime(first: NewsItem, second: NewsItem) {
+  return Math.abs(new Date(first.publishedAt).getTime() - new Date(second.publishedAt).getTime()) <= 36 * 60 * 60_000;
+}
+
+function sameEvent(first: NewsItem, second: NewsItem) {
+  return first.sourceId !== second.sourceId
+    && shareSymbol(first, second)
+    && closeInTime(first, second)
+    && similarity(headlineTokens(first.title), headlineTokens(second.title)) >= 0.5;
+}
+
+function annotateNews(items: NewsItem[]) {
+  const verification = new Map<string, NewsItem["verification"]>();
+  const conflicts: NewsConflict[] = [];
+  const duplicates: NewsDuplicate[] = [];
+  const priority: Record<NewsVerificationStatus, number> = {
+    standalone: 0,
+    confirmed: 1,
+    contradicted: 2,
+    duplicate: 3,
+  };
+
+  for (const item of items) {
+    verification.set(item.id, { status: "standalone", relatedItemIds: [], sourceCount: 1 });
+  }
+
+  const relate = (item: NewsItem, other: NewsItem, status: NewsVerificationStatus) => {
+    const previous = verification.get(item.id)!;
+    const relatedItemIds = [...new Set([...previous.relatedItemIds, other.id])];
+    const sourceCount = new Set([
+      item.sourceId,
+      ...relatedItemIds.map((id) => items.find((candidate) => candidate.id === id)?.sourceId),
+    ]).size;
+    if (priority[status] < priority[previous.status]) {
+      verification.set(item.id, { ...previous, relatedItemIds, sourceCount });
+      return;
+    }
+    verification.set(item.id, {
+      status,
+      relatedItemIds,
+      sourceCount,
+    });
+  };
+
+  for (let index = 0; index < items.length; index += 1) {
+    for (let otherIndex = index + 1; otherIndex < items.length; otherIndex += 1) {
+      const first = items[index];
+      const second = items[otherIndex];
+      if (!sameEvent(first, second)) continue;
+
+      const titlesMatch = similarity(headlineTokens(first.title), headlineTokens(second.title)) >= 0.75;
+      if (first.canonicalUrl === second.canonicalUrl || titlesMatch) {
+        duplicates.push({
+          id: `duplicate-${duplicates.length + 1}`,
+          canonicalUrl: first.canonicalUrl,
+          itemIds: [first.id, second.id],
+          sources: [first.source, second.source],
+        });
+        relate(first, second, "duplicate");
+        relate(second, first, "duplicate");
+      } else if (
+        (first.sentiment === "supportive" && second.sentiment === "adverse")
+        || (first.sentiment === "adverse" && second.sentiment === "supportive")
+      ) {
+        conflicts.push({
+          id: `conflict-${conflicts.length + 1}`,
+          theme: first.theme,
+          itemIds: [first.id, second.id],
+          sources: [first.source, second.source],
+          description: "Le fonti riportano segnali di sentiment opposti sullo stesso evento.",
+        });
+        relate(first, second, "contradicted");
+        relate(second, first, "contradicted");
+      } else if (first.sentiment === second.sentiment) {
+        relate(first, second, "confirmed");
+        relate(second, first, "confirmed");
+      }
+    }
+  }
+
+  return {
+    items: items.map((item) => ({ ...item, verification: verification.get(item.id)! })),
+    conflicts,
+    duplicates,
+  };
+}
+
+function snapshotFrom(
+  items: NewsItem[],
+  sources: NewsSource[],
+  locale: Locale,
+): NewsSnapshot {
+  const annotated = annotateNews(items);
+  const available = sources.filter((source) => source.kind === "live" && source.status === "live" && source.itemCount > 0).length;
+  const expected = sources.filter((source) => source.kind === "live").length;
+  const sourceStatus = available === 0 ? "degraded" : available === expected ? "live" : "partial";
+  const liveLabels = sources.filter((source) => source.kind === "live" && source.status === "live" && source.itemCount > 0).map((source) => source.label);
+  const sourceLabel = sourceStatus === "degraded"
+    ? locale === "en"
+      ? "No verified live market items available"
+      : "Nessun elemento di mercato live verificabile disponibile"
+    : locale === "en"
+      ? `${available}/${expected} sources with verifiable market items · ${liveLabels.join(" + ")}`
+      : `${available}/${expected} fonti con elementi di mercato verificabili · ${liveLabels.join(" + ")}`;
+  return {
+    items: annotated.items,
+    updatedAt: new Date().toISOString(),
+    sourceStatus,
+    sourceLabel,
+    sources,
+    sourceCoverage: { expected, available },
+    conflicts: annotated.conflicts,
+    duplicates: annotated.duplicates,
+  };
+}
+
+async function fetchNewsSource(config: NewsSourceConfig, locale: Locale) {
+  const checkedAt = new Date().toISOString();
+  try {
+    const response = await fetch(config.url, { signal: AbortSignal.timeout(2_000) });
     if (!response.ok) throw new Error(`RSS response ${response.status}`);
     const xml = await response.text();
     const now = Date.now();
-    const items = (xml.match(/<item[\s\S]*?<\/item>/gi) ?? []).slice(0, 8).flatMap((raw, index) => {
+    const items = (xml.match(/<item[\s\S]*?<\/item>/gi) ?? []).slice(0, 10).flatMap((raw, index) => {
       const title = xmlValue(raw, "title");
       if (!title) return [];
-      const summary = xmlValue(raw, "description") || "Sintesi non disponibile dal provider.";
+      const summary = xmlValue(raw, "description") || (locale === "en" ? "Summary unavailable from provider." : "Sintesi non disponibile dal provider.");
+      const publishedAt = Date.parse(xmlValue(raw, "pubDate"));
       const classified = classifyLiveHeadline(title, summary, locale);
-      if (!classified) return [];
+      const itemUrl = canonicalUrl(xmlValue(raw, "link") || xmlValue(raw, "guid"), config.citationHosts);
+      if (!classified || !itemUrl || Number.isNaN(publishedAt)) return [];
       return [{
-        id: `bbc-${index + 1}`,
-        publishedAt: new Date(Date.parse(xmlValue(raw, "pubDate")) || now - index * 15 * 60_000).toISOString(),
-        source: "BBC Business",
+        id: `${config.id}-${index + 1}`,
+        publishedAt: new Date(publishedAt).toISOString(),
+        source: config.label,
+        sourceId: config.id,
+        canonicalUrl: itemUrl,
         title,
         summary,
         ...classified,
+        verification: { status: "standalone" as const, relatedItemIds: [], sourceCount: 1 },
       }];
     });
-    if (!items.length) throw new Error("RSS returned no usable items");
-    const value: NewsSnapshot = { items, updatedAt: new Date().toISOString(), sourceStatus: "live", sourceLabel: "BBC Business RSS · classified by Vector" };
-    cachedNewsSnapshots[locale] = { expiresAt: Date.now() + 120_000, value };
-    return value;
-  } catch {
-    const value: NewsSnapshot = {
-      items: getNewsItems(locale),
-      updatedAt: new Date().toISOString(),
-      sourceStatus: "degraded",
-      sourceLabel: locale === "en" ? "Curated market snapshot · live RSS unavailable" : "Snapshot di mercato curato · RSS live non disponibile",
+    return {
+      items,
+      source: {
+        id: config.id,
+        label: config.label,
+        homepageUrl: config.homepageUrl,
+        status: "live" as const,
+        kind: "live" as const,
+        itemCount: items.length,
+        lastCheckedAt: checkedAt,
+      },
     };
-    cachedNewsSnapshots[locale] = { expiresAt: Date.now() + 30_000, value };
-    return value;
+  } catch {
+    return {
+      items: [] as NewsItem[],
+      source: {
+        id: config.id,
+        label: config.label,
+        homepageUrl: config.homepageUrl,
+        status: "degraded" as const,
+        kind: "live" as const,
+        itemCount: 0,
+        lastCheckedAt: checkedAt,
+      },
+    };
   }
+}
+
+async function getNewsSnapshot(locale: Locale): Promise<NewsSnapshot> {
+  const cached = cachedNewsSnapshots[locale];
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const results = await Promise.all(newsSourceConfigs.map((config) => fetchNewsSource(config, locale)));
+  const liveItems = results.flatMap((result) => result.items);
+  const sources = results.map((result) => result.source);
+  const value = snapshotFrom(liveItems, sources, locale);
+  cachedNewsSnapshots[locale] = { expiresAt: Date.now() + (liveItems.length ? 120_000 : 30_000), value };
+  return value;
 }
 
 const historicalBySymbol: Record<string, HistoricalPrecedent[]> = {
@@ -461,16 +688,23 @@ router.get("/assets/:symbol", async (req, res) => {
   const opportunity = opportunities.find((item) => item.symbol === symbol);
   const newsSnapshot = await getNewsSnapshot(locale);
   const liveAssetNews = newsSnapshot.items.filter((item) => item.symbols.some((itemSymbol) => itemSymbol.toUpperCase() === symbol));
-  const usingContextualNews = newsSnapshot.sourceStatus !== "live" || liveAssetNews.length === 0;
-  const news = (usingContextualNews ? getNewsItems(locale).filter((item) => item.symbols.some((itemSymbol) => itemSymbol.toUpperCase() === symbol)) : liveAssetNews).slice(0, 4);
+  const usingContextualNews = liveAssetNews.length === 0;
+  const news = liveAssetNews.slice(0, 4);
   const historicalPrecedents = historicalFor(symbol, locale);
   const content = assetContent(locale, symbol);
-  const newsSourceStatus = usingContextualNews ? (newsSnapshot.sourceStatus === "degraded" ? "degraded" : "contextual") : "live";
+  const newsSourceStatus = usingContextualNews
+    ? (newsSnapshot.sourceStatus === "degraded" ? "degraded" : "contextual")
+    : newsSnapshot.sourceStatus;
   const newsSourceLabel = usingContextualNews
     ? locale === "en"
-      ? "Curated asset context · no matching live item"
-      : "Contesto asset curato · nessun titolo live corrispondente"
+      ? "No verified live item matches this asset"
+      : "Nessun elemento live verificabile corrisponde a questo asset"
     : newsSnapshot.sourceLabel;
+  const assetNewsSources = usingContextualNews ? [] : newsSnapshot.sources;
+  const assetNewsSourceCoverage = usingContextualNews
+    ? { expected: newsSnapshot.sourceCoverage.expected, available: 0 }
+    : newsSnapshot.sourceCoverage;
+  const matchingItemIds = new Set(news.map((item) => item.id));
   res.json({
     symbol: market.symbol,
     name: content.name,
@@ -504,6 +738,10 @@ router.get("/assets/:symbol", async (req, res) => {
     dataStatus: newsSourceStatus,
     newsSourceStatus,
     newsSourceLabel,
+    newsSources: assetNewsSources,
+    newsSourceCoverage: assetNewsSourceCoverage,
+    newsConflicts: newsSnapshot.conflicts.filter((conflict) => conflict.itemIds.some((id) => matchingItemIds.has(id))),
+    newsDuplicates: newsSnapshot.duplicates.filter((duplicate) => duplicate.itemIds.some((id) => matchingItemIds.has(id))),
   });
 });
 

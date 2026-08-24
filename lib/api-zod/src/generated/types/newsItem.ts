@@ -7,11 +7,14 @@
  */
 import type { NewsItemHorizon } from './newsItemHorizon';
 import type { NewsItemSentiment } from './newsItemSentiment';
+import type { NewsVerification } from './newsVerification';
 
 export interface NewsItem {
   id: string;
   publishedAt: Date;
   source: string;
+  sourceId: string;
+  canonicalUrl: string;
   title: string;
   summary: string;
   symbols: string[];
@@ -20,4 +23,5 @@ export interface NewsItem {
   sentiment: NewsItemSentiment;
   relevance: number;
   analysis: string;
+  verification: NewsVerification;
 }

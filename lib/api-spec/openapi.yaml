@@ -341,10 +341,21 @@ components:
           $ref: "#/components/schemas/AnalysisThesis"
         riskLimits:
           $ref: "#/components/schemas/AnalysisRiskLimits"
-        dataStatus: { type: string, enum: [live, contextual, degraded] }
-        newsSourceStatus: { type: string, enum: [live, contextual, degraded] }
+        dataStatus: { type: string, enum: [live, partial, contextual, degraded] }
+        newsSourceStatus: { type: string, enum: [live, partial, contextual, degraded] }
         newsSourceLabel: { type: string }
-      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation, news, historicalPrecedents, thesis, riskLimits, dataStatus, newsSourceStatus, newsSourceLabel]
+        newsSources:
+          type: array
+          items: { $ref: "#/components/schemas/NewsSource" }
+        newsSourceCoverage:
+          $ref: "#/components/schemas/NewsSourceCoverage"
+        newsConflicts:
+          type: array
+          items: { $ref: "#/components/schemas/NewsConflict" }
+        newsDuplicates:
+          type: array
+          items: { $ref: "#/components/schemas/NewsDuplicate" }
+      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation, news, historicalPrecedents, thesis, riskLimits, dataStatus, newsSourceStatus, newsSourceLabel, newsSources, newsSourceCoverage, newsConflicts, newsDuplicates]
     NewsFeed:
       type: object
       properties:
@@ -352,15 +363,28 @@ components:
           type: array
           items: { $ref: "#/components/schemas/NewsItem" }
         updatedAt: { type: string, format: date-time }
-        sourceStatus: { type: string, enum: [live, degraded] }
+        sourceStatus: { type: string, enum: [live, partial, degraded] }
         sourceLabel: { type: string }
-      required: [items, updatedAt, sourceStatus, sourceLabel]
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/NewsSource" }
+        sourceCoverage:
+          $ref: "#/components/schemas/NewsSourceCoverage"
+        conflicts:
+          type: array
+          items: { $ref: "#/components/schemas/NewsConflict" }
+        duplicates:
+          type: array
+          items: { $ref: "#/components/schemas/NewsDuplicate" }
+      required: [items, updatedAt, sourceStatus, sourceLabel, sources, sourceCoverage, conflicts, duplicates]
     NewsItem:
       type: object
       properties:
         id: { type: string }
         publishedAt: { type: string, format: date-time }
         source: { type: string }
+        sourceId: { type: string }
+        canonicalUrl: { type: string }
         title: { type: string }
         summary: { type: string }
         symbols:
@@ -371,7 +395,60 @@ components:
         sentiment: { type: string, enum: [supportive, mixed, adverse] }
         relevance: { type: number }
         analysis: { type: string }
-      required: [id, publishedAt, source, title, summary, symbols, theme, horizon, sentiment, relevance, analysis]
+        verification:
+          $ref: "#/components/schemas/NewsVerification"
+      required: [id, publishedAt, source, sourceId, canonicalUrl, title, summary, symbols, theme, horizon, sentiment, relevance, analysis, verification]
+    NewsVerification:
+      type: object
+      properties:
+        status: { type: string, enum: [confirmed, contradicted, duplicate, standalone] }
+        relatedItemIds:
+          type: array
+          items: { type: string }
+        sourceCount: { type: number }
+      required: [status, relatedItemIds, sourceCount]
+    NewsSource:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        homepageUrl: { type: string }
+        status: { type: string, enum: [live, degraded] }
+        kind: { type: string, enum: [live, curated] }
+        itemCount: { type: number }
+        lastCheckedAt: { type: string, format: date-time }
+      required: [id, label, homepageUrl, status, kind, itemCount, lastCheckedAt]
+    NewsSourceCoverage:
+      type: object
+      properties:
+        expected: { type: number }
+        available: { type: number }
+      required: [expected, available]
+    NewsConflict:
+      type: object
+      properties:
+        id: { type: string }
+        theme: { type: string }
+        itemIds:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items: { type: string }
+        description: { type: string }
+      required: [id, theme, itemIds, sources, description]
+    NewsDuplicate:
+      type: object
+      properties:
+        id: { type: string }
+        canonicalUrl: { type: string }
+        itemIds:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items: { type: string }
+      required: [id, canonicalUrl, itemIds, sources]
     HistoricalPrecedent:
       type: object
       properties:

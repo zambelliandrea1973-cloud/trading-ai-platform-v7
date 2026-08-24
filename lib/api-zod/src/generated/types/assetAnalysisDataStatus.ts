@@ -11,6 +11,7 @@ export type AssetAnalysisDataStatus = typeof AssetAnalysisDataStatus[keyof typeo
 
 export const AssetAnalysisDataStatus = {
   live: 'live',
+  partial: 'partial',
   contextual: 'contextual',
   degraded: 'degraded',
 } as const;

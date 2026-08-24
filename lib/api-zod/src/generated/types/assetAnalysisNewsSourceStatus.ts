@@ -11,6 +11,7 @@ export type AssetAnalysisNewsSourceStatus = typeof AssetAnalysisNewsSourceStatus
 
 export const AssetAnalysisNewsSourceStatus = {
   live: 'live',
+  partial: 'partial',
   contextual: 'contextual',
   degraded: 'degraded',
 } as const;

@@ -90,6 +90,8 @@ export const GetNewsResponse = zod.object({
   "id": zod.string(),
   "publishedAt": zod.coerce.date(),
   "source": zod.string(),
+  "sourceId": zod.string(),
+  "canonicalUrl": zod.string(),
   "title": zod.string(),
   "summary": zod.string(),
   "symbols": zod.array(zod.string()),
@@ -97,11 +99,42 @@ export const GetNewsResponse = zod.object({
   "horizon": zod.enum(['short', 'medium', 'long']),
   "sentiment": zod.enum(['supportive', 'mixed', 'adverse']),
   "relevance": zod.number(),
-  "analysis": zod.string()
+  "analysis": zod.string(),
+  "verification": zod.object({
+  "status": zod.enum(['confirmed', 'contradicted', 'duplicate', 'standalone']),
+  "relatedItemIds": zod.array(zod.string()),
+  "sourceCount": zod.number()
+})
 })),
   "updatedAt": zod.coerce.date(),
-  "sourceStatus": zod.enum(['live', 'degraded']),
-  "sourceLabel": zod.string()
+  "sourceStatus": zod.enum(['live', 'partial', 'degraded']),
+  "sourceLabel": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "homepageUrl": zod.string(),
+  "status": zod.enum(['live', 'degraded']),
+  "kind": zod.enum(['live', 'curated']),
+  "itemCount": zod.number(),
+  "lastCheckedAt": zod.coerce.date()
+})),
+  "sourceCoverage": zod.object({
+  "expected": zod.number(),
+  "available": zod.number()
+}),
+  "conflicts": zod.array(zod.object({
+  "id": zod.string(),
+  "theme": zod.string(),
+  "itemIds": zod.array(zod.string()),
+  "sources": zod.array(zod.string()),
+  "description": zod.string()
+})),
+  "duplicates": zod.array(zod.object({
+  "id": zod.string(),
+  "canonicalUrl": zod.string(),
+  "itemIds": zod.array(zod.string()),
+  "sources": zod.array(zod.string())
+}))
 })
 
 
@@ -149,6 +182,8 @@ export const GetAssetAnalysisResponse = zod.object({
   "id": zod.string(),
   "publishedAt": zod.coerce.date(),
   "source": zod.string(),
+  "sourceId": zod.string(),
+  "canonicalUrl": zod.string(),
   "title": zod.string(),
   "summary": zod.string(),
   "symbols": zod.array(zod.string()),
@@ -156,7 +191,12 @@ export const GetAssetAnalysisResponse = zod.object({
   "horizon": zod.enum(['short', 'medium', 'long']),
   "sentiment": zod.enum(['supportive', 'mixed', 'adverse']),
   "relevance": zod.number(),
-  "analysis": zod.string()
+  "analysis": zod.string(),
+  "verification": zod.object({
+  "status": zod.enum(['confirmed', 'contradicted', 'duplicate', 'standalone']),
+  "relatedItemIds": zod.array(zod.string()),
+  "sourceCount": zod.number()
+})
 })),
   "historicalPrecedents": zod.array(zod.object({
   "event": zod.string(),
@@ -186,9 +226,35 @@ export const GetAssetAnalysisResponse = zod.object({
   "positionSizing": zod.string(),
   "limitations": zod.array(zod.string())
 }),
-  "dataStatus": zod.enum(['live', 'contextual', 'degraded']),
-  "newsSourceStatus": zod.enum(['live', 'contextual', 'degraded']),
-  "newsSourceLabel": zod.string()
+  "dataStatus": zod.enum(['live', 'partial', 'contextual', 'degraded']),
+  "newsSourceStatus": zod.enum(['live', 'partial', 'contextual', 'degraded']),
+  "newsSourceLabel": zod.string(),
+  "newsSources": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "homepageUrl": zod.string(),
+  "status": zod.enum(['live', 'degraded']),
+  "kind": zod.enum(['live', 'curated']),
+  "itemCount": zod.number(),
+  "lastCheckedAt": zod.coerce.date()
+})),
+  "newsSourceCoverage": zod.object({
+  "expected": zod.number(),
+  "available": zod.number()
+}),
+  "newsConflicts": zod.array(zod.object({
+  "id": zod.string(),
+  "theme": zod.string(),
+  "itemIds": zod.array(zod.string()),
+  "sources": zod.array(zod.string()),
+  "description": zod.string()
+})),
+  "newsDuplicates": zod.array(zod.object({
+  "id": zod.string(),
+  "canonicalUrl": zod.string(),
+  "itemIds": zod.array(zod.string()),
+  "sources": zod.array(zod.string())
+}))
 })
 
 
