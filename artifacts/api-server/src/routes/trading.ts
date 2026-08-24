@@ -18,9 +18,9 @@ const markets = [
 type Horizon = "short" | "medium" | "long";
 type Sentiment = "supportive" | "mixed" | "adverse";
 type Locale = "it" | "en";
-type NewsVerificationStatus = "confirmed" | "contradicted" | "duplicate" | "standalone";
+export type NewsVerificationStatus = "confirmed" | "contradicted" | "duplicate" | "standalone";
 
-type NewsItem = {
+export type NewsItem = {
   id: string;
   publishedAt: string;
   source: string;
@@ -41,7 +41,7 @@ type NewsItem = {
   };
 };
 
-type NewsSource = {
+export type NewsSource = {
   id: string;
   label: string;
   homepageUrl: string;
@@ -51,7 +51,7 @@ type NewsSource = {
   lastCheckedAt: string;
 };
 
-type NewsConflict = {
+export type NewsConflict = {
   id: string;
   theme: string;
   itemIds: string[];
@@ -59,7 +59,7 @@ type NewsConflict = {
   description: string;
 };
 
-type NewsDuplicate = {
+export type NewsDuplicate = {
   id: string;
   canonicalUrl: string;
   itemIds: string[];
@@ -172,7 +172,7 @@ const englishSeedText: Record<string, Pick<NewsItem, "title" | "summary" | "anal
   },
 };
 
-type NewsSourceConfig = {
+export type NewsSourceConfig = {
   id: string;
   label: string;
   homepageUrl: string;
@@ -260,7 +260,7 @@ function classifyLiveHeadline(title: string, summary: string, locale: Locale) {
   };
 }
 
-function canonicalUrl(value: string, citationHosts: string[]) {
+export function canonicalUrl(value: string, citationHosts: string[]) {
   try {
     if (!value) return undefined;
     const parsed = new URL(value);
@@ -303,7 +303,7 @@ function sameEvent(first: NewsItem, second: NewsItem) {
     && similarity(headlineTokens(first.title), headlineTokens(second.title)) >= 0.5;
 }
 
-function annotateNews(items: NewsItem[]) {
+export function annotateNews(items: NewsItem[]) {
   const verification = new Map<string, NewsItem["verification"]>();
   const conflicts: NewsConflict[] = [];
   const duplicates: NewsDuplicate[] = [];
@@ -379,7 +379,7 @@ function annotateNews(items: NewsItem[]) {
   };
 }
 
-function snapshotFrom(
+export function snapshotFrom(
   items: NewsItem[],
   sources: NewsSource[],
   locale: Locale,
@@ -408,10 +408,10 @@ function snapshotFrom(
   };
 }
 
-async function fetchNewsSource(config: NewsSourceConfig, locale: Locale) {
+export async function fetchNewsSource(config: NewsSourceConfig, locale: Locale, fetchImpl: typeof fetch = fetch) {
   const checkedAt = new Date().toISOString();
   try {
-    const response = await fetch(config.url, { signal: AbortSignal.timeout(2_000) });
+    const response = await fetchImpl(config.url, { signal: AbortSignal.timeout(2_000) });
     if (!response.ok) throw new Error(`RSS response ${response.status}`);
     const xml = await response.text();
     const now = Date.now();
@@ -435,13 +435,14 @@ async function fetchNewsSource(config: NewsSourceConfig, locale: Locale) {
         verification: { status: "standalone" as const, relatedItemIds: [], sourceCount: 1 },
       }];
     });
+    const sourceStatus: NewsSource["status"] = items.length > 0 ? "live" : "degraded";
     return {
       items,
       source: {
         id: config.id,
         label: config.label,
         homepageUrl: config.homepageUrl,
-        status: "live" as const,
+        status: sourceStatus,
         kind: "live" as const,
         itemCount: items.length,
         lastCheckedAt: checkedAt,
