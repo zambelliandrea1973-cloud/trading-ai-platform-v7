@@ -1,0 +1,619 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: trading
+    description: Paper trading dashboard data
+  - name: broker
+    description: Broker and MT5 bridge readiness
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [trading]
+      summary: Get paper trading dashboard overview
+      responses:
+        "200":
+          description: Dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /markets:
+    get:
+      operationId: getMarkets
+      tags: [trading]
+      summary: List tracked markets
+      responses:
+        "200":
+          description: Market snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Market"
+  /opportunities:
+    get:
+      operationId: getOpportunities
+      tags: [trading]
+      summary: List ranked paper opportunities
+      responses:
+        "200":
+          description: Ranked opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Opportunity"
+  /news:
+    get:
+      operationId: getNews
+      tags: [trading]
+      summary: Get classified live market news
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema: { type: string }
+        - name: theme
+          in: query
+          required: false
+          schema: { type: string }
+        - name: horizon
+          in: query
+          required: false
+          schema: { type: string, enum: [short, medium, long] }
+        - name: locale
+          in: query
+          required: false
+          schema: { type: string, enum: [it, en] }
+      responses:
+        "200":
+          description: Classified news snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsFeed"
+  /assets/{symbol}:
+    get:
+      operationId: getAssetAnalysis
+      tags: [trading]
+      summary: Get explainable asset analysis
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: locale
+          in: query
+          required: false
+          schema: { type: string, enum: [it, en] }
+      responses:
+        "200":
+          description: Asset analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetAnalysis"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /broker/status:
+    get:
+      operationId: getBrokerStatus
+      tags: [broker]
+      summary: Get Axi MT5 bridge readiness
+      responses:
+        "200":
+          description: Broker connection and execution status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrokerStatus"
+  /broker/quotes:
+    get:
+      operationId: getBrokerQuotes
+      tags: [broker]
+      summary: Get normalized MT5 quotes
+      security:
+        - BrokerReadKey: []
+      parameters:
+        - name: symbols
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Normalized quote snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NormalizedQuote" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/account:
+    get:
+      operationId: getBrokerAccount
+      tags: [broker]
+      summary: Get normalized MT5 account snapshot
+      security:
+        - BrokerReadKey: []
+      responses:
+        "200":
+          description: Normalized account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountSnapshot" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/positions:
+    get:
+      operationId: getBrokerPositions
+      tags: [broker]
+      summary: Get normalized MT5 positions
+      security:
+        - BrokerReadKey: []
+      responses:
+        "200":
+          description: Normalized positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NormalizedPosition" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/history:
+    get:
+      operationId: getBrokerHistory
+      tags: [broker]
+      summary: Get normalized MT5 trade history
+      security:
+        - BrokerReadKey: []
+      parameters:
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Normalized history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NormalizedHistoryEntry" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/mt5/heartbeat:
+    post:
+      operationId: submitMt5Heartbeat
+      tags: [broker]
+      summary: Record an authenticated MT5 bridge heartbeat
+      security:
+        - Mt5BridgeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Mt5BridgeHeartbeat" }
+      responses:
+        "204": { description: Heartbeat recorded }
+        "400": { description: Invalid heartbeat }
+        "401": { description: Missing or invalid bridge key }
+        "403": { description: Bridge network is not allowlisted }
+components:
+  responses:
+    BrokerReadUnauthorized:
+      description: Missing or invalid broker read key
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BrokerReadForbidden:
+      description: Broker read network is not allowlisted
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BridgeProtocolFailure:
+      description: Bridge returned malformed or rejected protocol data
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BridgeUnavailable:
+      description: Bridge is unavailable or read access is not configured
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  securitySchemes:
+    Mt5BridgeKey:
+      type: apiKey
+      in: header
+      name: x-mt5-bridge-key
+    BrokerReadKey:
+      type: apiKey
+      in: header
+      name: x-broker-read-key
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Market:
+      type: object
+      properties:
+        symbol: { type: string }
+        name: { type: string }
+        assetClass: { type: string }
+        price: { type: number }
+        change: { type: number }
+        changePercent: { type: number }
+        sparkline:
+          type: array
+          items: { type: number }
+        status: { type: string }
+      required: [symbol, name, assetClass, price, change, changePercent, sparkline, status]
+    Opportunity:
+      type: object
+      properties:
+        symbol: { type: string }
+        signal: { type: string }
+        confidence: { type: number }
+        risk: { type: string }
+        state: { type: string }
+        rationale: { type: string }
+      required: [symbol, signal, confidence, risk, state, rationale]
+    BrainScore:
+      type: object
+      properties:
+        direction: { type: string }
+        score: { type: number }
+        confidence: { type: number }
+        rationale: { type: string }
+      required: [direction, score, confidence, rationale]
+    AssetAnalysis:
+      type: object
+      properties:
+        symbol: { type: string }
+        name: { type: string }
+        price: { type: number }
+        decision: { type: string }
+        confidence: { type: number }
+        riskLevel: { type: string }
+        regime: { type: string }
+        explanation: { type: string }
+        technical: { $ref: "#/components/schemas/BrainScore" }
+        fundamental: { $ref: "#/components/schemas/BrainScore" }
+        risk: { $ref: "#/components/schemas/BrainScore" }
+        indicators:
+          type: object
+          additionalProperties: { type: number }
+        invalidation: { type: string }
+        news:
+          type: array
+          items: { $ref: "#/components/schemas/NewsItem" }
+        historicalPrecedents:
+          type: array
+          items: { $ref: "#/components/schemas/HistoricalPrecedent" }
+        thesis:
+          $ref: "#/components/schemas/AnalysisThesis"
+        riskLimits:
+          $ref: "#/components/schemas/AnalysisRiskLimits"
+        dataStatus: { type: string, enum: [live, partial, contextual, degraded] }
+        newsSourceStatus: { type: string, enum: [live, partial, contextual, degraded] }
+        newsSourceLabel: { type: string }
+        newsSources:
+          type: array
+          items: { $ref: "#/components/schemas/NewsSource" }
+        newsSourceCoverage:
+          $ref: "#/components/schemas/NewsSourceCoverage"
+        newsConflicts:
+          type: array
+          items: { $ref: "#/components/schemas/NewsConflict" }
+        newsDuplicates:
+          type: array
+          items: { $ref: "#/components/schemas/NewsDuplicate" }
+      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation, news, historicalPrecedents, thesis, riskLimits, dataStatus, newsSourceStatus, newsSourceLabel, newsSources, newsSourceCoverage, newsConflicts, newsDuplicates]
+    NewsFeed:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NewsItem" }
+        updatedAt: { type: string, format: date-time }
+        sourceStatus: { type: string, enum: [live, partial, degraded] }
+        sourceLabel: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/NewsSource" }
+        sourceCoverage:
+          $ref: "#/components/schemas/NewsSourceCoverage"
+        conflicts:
+          type: array
+          items: { $ref: "#/components/schemas/NewsConflict" }
+        duplicates:
+          type: array
+          items: { $ref: "#/components/schemas/NewsDuplicate" }
+      required: [items, updatedAt, sourceStatus, sourceLabel, sources, sourceCoverage, conflicts, duplicates]
+    NewsItem:
+      type: object
+      properties:
+        id: { type: string }
+        publishedAt: { type: string, format: date-time }
+        source: { type: string }
+        sourceId: { type: string }
+        canonicalUrl: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        symbols:
+          type: array
+          items: { type: string }
+        theme: { type: string }
+        horizon: { type: string, enum: [short, medium, long] }
+        sentiment: { type: string, enum: [supportive, mixed, adverse] }
+        relevance: { type: number }
+        analysis: { type: string }
+        verification:
+          $ref: "#/components/schemas/NewsVerification"
+      required: [id, publishedAt, source, sourceId, canonicalUrl, title, summary, symbols, theme, horizon, sentiment, relevance, analysis, verification]
+    NewsVerification:
+      type: object
+      properties:
+        status: { type: string, enum: [confirmed, contradicted, duplicate, standalone] }
+        relatedItemIds:
+          type: array
+          items: { type: string }
+        sourceCount: { type: number }
+      required: [status, relatedItemIds, sourceCount]
+    NewsSource:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        homepageUrl: { type: string }
+        status: { type: string, enum: [live, degraded] }
+        kind: { type: string, enum: [live, curated] }
+        itemCount: { type: number }
+        lastCheckedAt: { type: string, format: date-time }
+      required: [id, label, homepageUrl, status, kind, itemCount, lastCheckedAt]
+    NewsSourceCoverage:
+      type: object
+      properties:
+        expected: { type: number }
+        available: { type: number }
+      required: [expected, available]
+    NewsConflict:
+      type: object
+      properties:
+        id: { type: string }
+        theme: { type: string }
+        itemIds:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items: { type: string }
+        description: { type: string }
+      required: [id, theme, itemIds, sources, description]
+    NewsDuplicate:
+      type: object
+      properties:
+        id: { type: string }
+        canonicalUrl: { type: string }
+        itemIds:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items: { type: string }
+      required: [id, canonicalUrl, itemIds, sources]
+    HistoricalPrecedent:
+      type: object
+      properties:
+        event: { type: string }
+        date: { type: string, format: date }
+        matchScore: { type: number }
+        trigger: { type: string }
+        takeaway: { type: string }
+        caveat: { type: string }
+        outcomes:
+          type: array
+          items: { $ref: "#/components/schemas/HistoricalOutcome" }
+      required: [event, date, matchScore, trigger, takeaway, caveat, outcomes]
+    HistoricalOutcome:
+      type: object
+      properties:
+        horizon: { type: string, enum: [short, medium, long] }
+        medianReturn: { type: number }
+        positiveRate: { type: number }
+        sampleSize: { type: number }
+      required: [horizon, medianReturn, positiveRate, sampleSize]
+    AnalysisThesis:
+      type: object
+      properties:
+        summary: { type: string }
+        short: { type: string }
+        medium: { type: string }
+        long: { type: string }
+        confidence: { type: number }
+        invalidation: { type: string }
+      required: [summary, short, medium, long, confidence, invalidation]
+    AnalysisRiskLimits:
+      type: object
+      properties:
+        maxLossPercent: { type: number }
+        maxExposurePercent: { type: number }
+        positionSizing: { type: string }
+        limitations:
+          type: array
+          items: { type: string }
+      required: [maxLossPercent, maxExposurePercent, positionSizing, limitations]
+    Dashboard:
+      type: object
+      properties:
+        marketState: { type: string }
+        marketStateDetail: { type: string }
+        riskScore: { type: number }
+        riskLabel: { type: string }
+        riskUpdatedAt: { type: string }
+        paperCapital: { type: number }
+        equity: { type: number }
+        dailyPnl: { type: number }
+        openPositions: { type: number }
+        exposure: { type: number }
+        drawdown: { type: number }
+        opportunities:
+          type: array
+          items: { $ref: "#/components/schemas/Opportunity" }
+        regime: { type: string }
+        warningLevel: { type: string }
+      required: [marketState, marketStateDetail, riskScore, riskLabel, riskUpdatedAt, paperCapital, equity, dailyPnl, openPositions, exposure, drawdown, opportunities, regime, warningLevel]
+    BrokerStatus:
+      type: object
+      properties:
+        provider: { type: string }
+        venue: { type: string }
+        mode: { type: string }
+        status: { type: string }
+        connected: { type: boolean }
+        executionEnabled: { type: boolean }
+        bridgeRequired: { type: boolean }
+        capabilities:
+          type: array
+          items: { type: string }
+        message: { type: string }
+        health: { type: string, enum: [healthy, degraded, unknown] }
+        lastHeartbeatAt: { type: string, format: date-time }
+        lastHealthCheckAt: { type: string, format: date-time }
+        bridgeVersion: { type: string }
+        lastError: { type: string }
+        auditTrail:
+          type: array
+          items: { $ref: "#/components/schemas/BrokerAuditEvent" }
+        database:
+          $ref: "#/components/schemas/BrokerDatabaseStatus"
+        dataStatus:
+          type: object
+          properties:
+            quotes: { $ref: "#/components/schemas/BrokerDataStatus" }
+            account: { $ref: "#/components/schemas/BrokerDataStatus" }
+            positions: { $ref: "#/components/schemas/BrokerDataStatus" }
+            history: { $ref: "#/components/schemas/BrokerDataStatus" }
+          required: [quotes, account, positions, history]
+      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message, health, auditTrail, database, dataStatus]
+    BrokerDataStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [available, unavailable, malformed, error, unknown] }
+        lastCheckedAt: { type: string, format: date-time }
+      required: [status]
+    BrokerAuditEvent:
+      type: object
+      properties:
+        event: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string, enum: [system, bridge] }
+        detail: { type: string }
+      required: [event, at, actor]
+    BrokerDatabaseStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [healthy, degraded, unknown] }
+        message: { type: string }
+      required: [status, message]
+    NormalizedQuote:
+      type: object
+      properties:
+        symbol: { type: string }
+        bid: { type: number }
+        ask: { type: number }
+        timestamp: { type: string, format: date-time }
+        spreadPoints: { type: number }
+      required: [symbol, bid, ask, timestamp]
+    AccountSnapshot:
+      type: object
+      properties:
+        externalAccountId: { type: string }
+        balance: { type: number }
+        equity: { type: number }
+        margin: { type: number }
+        freeMargin: { type: number }
+        currency: { type: string }
+      required: [balance, equity, currency]
+    NormalizedPosition:
+      type: object
+      properties:
+        externalId: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        volume: { type: number }
+        openPrice: { type: number }
+        stopLoss: { type: number }
+        takeProfit: { type: number }
+        openedAt: { type: string, format: date-time }
+      required: [externalId, symbol, side, volume, openPrice, openedAt]
+    NormalizedHistoryEntry:
+      type: object
+      properties:
+        externalId: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        volume: { type: number }
+        openPrice: { type: number }
+        closePrice: { type: number }
+        profit: { type: number }
+        currency: { type: string }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        status: { type: string, enum: [open, closed, cancelled] }
+      required: [externalId, symbol, side, volume, openPrice, openedAt, status]
+    Mt5BridgeHeartbeat:
+      type: object
+      properties:
+        bridgeVersion: { type: string }
+        status: { type: string, enum: [healthy, degraded] }
+        heartbeatAt: { type: string, format: date-time }
+      required: [status, heartbeatAt]
+
