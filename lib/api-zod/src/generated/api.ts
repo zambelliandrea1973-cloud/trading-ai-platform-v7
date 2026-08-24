@@ -126,7 +126,100 @@ export const GetBrokerStatusResponse = zod.object({
   "executionEnabled": zod.boolean(),
   "bridgeRequired": zod.boolean(),
   "capabilities": zod.array(zod.string()),
-  "message": zod.string()
+  "message": zod.string(),
+  "health": zod.enum(['healthy', 'degraded', 'unknown']),
+  "lastHeartbeatAt": zod.coerce.date().optional(),
+  "lastHealthCheckAt": zod.coerce.date().optional(),
+  "bridgeVersion": zod.string().optional(),
+  "lastError": zod.string().optional(),
+  "auditTrail": zod.array(zod.object({
+  "event": zod.string(),
+  "at": zod.coerce.date(),
+  "actor": zod.enum(['system', 'bridge']),
+  "detail": zod.string().optional()
+}))
 })
+
+
+/**
+ * @summary Get normalized MT5 quotes
+ */
+export const GetBrokerQuotesQueryParams = zod.object({
+  "symbols": zod.coerce.string().optional()
+})
+
+export const GetBrokerQuotesResponseItem = zod.object({
+  "symbol": zod.string(),
+  "bid": zod.number(),
+  "ask": zod.number(),
+  "timestamp": zod.coerce.date(),
+  "spreadPoints": zod.number().optional()
+})
+export const GetBrokerQuotesResponse = zod.array(GetBrokerQuotesResponseItem)
+
+
+/**
+ * @summary Get normalized MT5 account snapshot
+ */
+export const GetBrokerAccountResponse = zod.object({
+  "externalAccountId": zod.string().optional(),
+  "balance": zod.number(),
+  "equity": zod.number(),
+  "margin": zod.number().optional(),
+  "freeMargin": zod.number().optional(),
+  "currency": zod.string()
+})
+
+
+/**
+ * @summary Get normalized MT5 positions
+ */
+export const GetBrokerPositionsResponseItem = zod.object({
+  "externalId": zod.string(),
+  "symbol": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "volume": zod.number(),
+  "openPrice": zod.number(),
+  "stopLoss": zod.number().optional(),
+  "takeProfit": zod.number().optional(),
+  "openedAt": zod.coerce.date()
+})
+export const GetBrokerPositionsResponse = zod.array(GetBrokerPositionsResponseItem)
+
+
+/**
+ * @summary Get normalized MT5 trade history
+ */
+export const GetBrokerHistoryQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
+})
+
+export const GetBrokerHistoryResponseItem = zod.object({
+  "externalId": zod.string(),
+  "symbol": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "volume": zod.number(),
+  "openPrice": zod.number(),
+  "closePrice": zod.number().optional(),
+  "profit": zod.number().optional(),
+  "currency": zod.string().optional(),
+  "openedAt": zod.coerce.date(),
+  "closedAt": zod.coerce.date().optional(),
+  "status": zod.enum(['open', 'closed', 'cancelled'])
+})
+export const GetBrokerHistoryResponse = zod.array(GetBrokerHistoryResponseItem)
+
+
+/**
+ * @summary Record an authenticated MT5 bridge heartbeat
+ */
+export const SubmitMt5HeartbeatBody = zod.object({
+  "bridgeVersion": zod.string().optional(),
+  "status": zod.enum(['healthy', 'degraded']),
+  "heartbeatAt": zod.coerce.date()
+})
+
+export const SubmitMt5HeartbeatResponse = zod.void()
 
 

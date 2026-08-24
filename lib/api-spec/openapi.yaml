@@ -104,7 +104,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BrokerStatus"
+  /broker/quotes:
+    get:
+      operationId: getBrokerQuotes
+      tags: [broker]
+      summary: Get normalized MT5 quotes
+      security:
+        - BrokerReadKey: []
+      parameters:
+        - name: symbols
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Normalized quote snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NormalizedQuote" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/account:
+    get:
+      operationId: getBrokerAccount
+      tags: [broker]
+      summary: Get normalized MT5 account snapshot
+      security:
+        - BrokerReadKey: []
+      responses:
+        "200":
+          description: Normalized account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountSnapshot" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/positions:
+    get:
+      operationId: getBrokerPositions
+      tags: [broker]
+      summary: Get normalized MT5 positions
+      security:
+        - BrokerReadKey: []
+      responses:
+        "200":
+          description: Normalized positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NormalizedPosition" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/history:
+    get:
+      operationId: getBrokerHistory
+      tags: [broker]
+      summary: Get normalized MT5 trade history
+      security:
+        - BrokerReadKey: []
+      parameters:
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Normalized history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NormalizedHistoryEntry" }
+        "401": { $ref: "#/components/responses/BrokerReadUnauthorized" }
+        "403": { $ref: "#/components/responses/BrokerReadForbidden" }
+        "502": { $ref: "#/components/responses/BridgeProtocolFailure" }
+        "503": { $ref: "#/components/responses/BridgeUnavailable" }
+  /broker/mt5/heartbeat:
+    post:
+      operationId: submitMt5Heartbeat
+      tags: [broker]
+      summary: Record an authenticated MT5 bridge heartbeat
+      security:
+        - Mt5BridgeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Mt5BridgeHeartbeat" }
+      responses:
+        "204": { description: Heartbeat recorded }
+        "400": { description: Invalid heartbeat }
+        "401": { description: Missing or invalid bridge key }
+        "403": { description: Bridge network is not allowlisted }
 components:
+  responses:
+    BrokerReadUnauthorized:
+      description: Missing or invalid broker read key
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BrokerReadForbidden:
+      description: Broker read network is not allowlisted
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BridgeProtocolFailure:
+      description: Bridge returned malformed or rejected protocol data
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BridgeUnavailable:
+      description: Bridge is unavailable or read access is not configured
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  securitySchemes:
+    Mt5BridgeKey:
+      type: apiKey
+      in: header
+      name: x-mt5-bridge-key
+    BrokerReadKey:
+      type: apiKey
+      in: header
+      name: x-broker-read-key
   schemas:
     HealthStatus:
       type: object
@@ -204,5 +333,74 @@ components:
           type: array
           items: { type: string }
         message: { type: string }
-      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message]
+        health: { type: string, enum: [healthy, degraded, unknown] }
+        lastHeartbeatAt: { type: string, format: date-time }
+        lastHealthCheckAt: { type: string, format: date-time }
+        bridgeVersion: { type: string }
+        lastError: { type: string }
+        auditTrail:
+          type: array
+          items: { $ref: "#/components/schemas/BrokerAuditEvent" }
+      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message, health, auditTrail]
+    BrokerAuditEvent:
+      type: object
+      properties:
+        event: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string, enum: [system, bridge] }
+        detail: { type: string }
+      required: [event, at, actor]
+    NormalizedQuote:
+      type: object
+      properties:
+        symbol: { type: string }
+        bid: { type: number }
+        ask: { type: number }
+        timestamp: { type: string, format: date-time }
+        spreadPoints: { type: number }
+      required: [symbol, bid, ask, timestamp]
+    AccountSnapshot:
+      type: object
+      properties:
+        externalAccountId: { type: string }
+        balance: { type: number }
+        equity: { type: number }
+        margin: { type: number }
+        freeMargin: { type: number }
+        currency: { type: string }
+      required: [balance, equity, currency]
+    NormalizedPosition:
+      type: object
+      properties:
+        externalId: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        volume: { type: number }
+        openPrice: { type: number }
+        stopLoss: { type: number }
+        takeProfit: { type: number }
+        openedAt: { type: string, format: date-time }
+      required: [externalId, symbol, side, volume, openPrice, openedAt]
+    NormalizedHistoryEntry:
+      type: object
+      properties:
+        externalId: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        volume: { type: number }
+        openPrice: { type: number }
+        closePrice: { type: number }
+        profit: { type: number }
+        currency: { type: string }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        status: { type: string, enum: [open, closed, cancelled] }
+      required: [externalId, symbol, side, volume, openPrice, openedAt, status]
+    Mt5BridgeHeartbeat:
+      type: object
+      properties:
+        bridgeVersion: { type: string }
+        status: { type: string, enum: [healthy, degraded] }
+        heartbeatAt: { type: string, format: date-time }
+      required: [status, heartbeatAt]
 

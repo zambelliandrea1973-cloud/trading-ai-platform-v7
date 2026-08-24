@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BrokerAuditEvent } from './brokerAuditEvent';
+import type { BrokerStatusHealth } from './brokerStatusHealth';
 
 export interface BrokerStatus {
   provider: string;
@@ -16,4 +18,10 @@ export interface BrokerStatus {
   bridgeRequired: boolean;
   capabilities: string[];
   message: string;
+  health: BrokerStatusHealth;
+  lastHeartbeatAt?: Date;
+  lastHealthCheckAt?: Date;
+  bridgeVersion?: string;
+  lastError?: string;
+  auditTrail: BrokerAuditEvent[];
 }

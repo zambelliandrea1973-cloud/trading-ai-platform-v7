@@ -43,6 +43,20 @@ export interface AccountSnapshot {
   currency: string;
 }
 
+export interface NormalizedHistoryEntry {
+  externalId: string;
+  symbol: string;
+  side: "buy" | "sell";
+  volume: number;
+  openPrice: number;
+  closePrice?: number;
+  profit?: number;
+  currency?: string;
+  openedAt: string;
+  closedAt?: string;
+  status: "open" | "closed" | "cancelled";
+}
+
 export interface BrokerOrderRequest {
   symbol: string;
   side: "buy" | "sell";
@@ -60,7 +74,15 @@ export interface BrokerAdapter {
   getQuotes(symbols: string[]): Promise<NormalizedQuote[]>;
   getAccountSnapshot(): Promise<AccountSnapshot>;
   getPositions(): Promise<NormalizedPosition[]>;
+  getHistory(from?: string, to?: string): Promise<NormalizedHistoryEntry[]>;
   submitOrder(request: BrokerOrderRequest): Promise<never>;
+}
+
+export interface BrokerAuditEvent {
+  event: string;
+  at: string;
+  actor: "system" | "bridge";
+  detail?: string;
 }
 
 export interface BrokerStatus {
@@ -73,6 +95,12 @@ export interface BrokerStatus {
   bridgeRequired: boolean;
   capabilities: BrokerCapability[];
   message: string;
+  health: "healthy" | "degraded" | "unknown";
+  lastHeartbeatAt?: string;
+  lastHealthCheckAt?: string;
+  bridgeVersion?: string;
+  lastError?: string;
+  auditTrail: BrokerAuditEvent[];
 }
 
 export class BrokerUnavailableError extends Error {
@@ -81,5 +109,14 @@ export class BrokerUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BrokerUnavailableError";
+  }
+}
+
+export class BrokerProtocolError extends Error {
+  readonly code = "BRIDGE_PROTOCOL_ERROR";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "BrokerProtocolError";
   }
 }

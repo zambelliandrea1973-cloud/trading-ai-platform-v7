@@ -10,6 +10,8 @@ export const brokerConnectionsTable = pgTable("broker_connections", {
   externalAccountId: text("external_account_id"),
   bridgeVersion: text("bridge_version"),
   lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
+  lastHealthCheckAt: timestamp("last_health_check_at", { withTimezone: true }),
+  lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

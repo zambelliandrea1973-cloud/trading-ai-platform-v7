@@ -7,6 +7,8 @@ export const logger = pino({
   redact: [
     "req.headers.authorization",
     "req.headers.cookie",
+    "req.headers.x-mt5-bridge-key",
+    "req.headers.x-broker-read-key",
     "res.headers['set-cookie']",
   ],
   ...(isProduction

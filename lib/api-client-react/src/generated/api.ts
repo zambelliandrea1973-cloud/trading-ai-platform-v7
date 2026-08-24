@@ -6,27 +6,42 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
+  AccountSnapshot,
   AssetAnalysis,
+  BridgeProtocolFailureResponse,
+  BridgeUnavailableResponse,
+  BrokerReadForbiddenResponse,
+  BrokerReadUnauthorizedResponse,
   BrokerStatus,
   Dashboard,
   Error,
+  GetBrokerHistoryParams,
+  GetBrokerQuotesParams,
   HealthStatus,
   Market,
+  Mt5BridgeHeartbeat,
+  NormalizedHistoryEntry,
+  NormalizedPosition,
+  NormalizedQuote,
   Opportunity
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -514,4 +529,397 @@ export function useGetBrokerStatus<TData = Awaited<ReturnType<typeof getBrokerSt
 
 
 
+
+export const getGetBrokerQuotesUrl = (params?: GetBrokerQuotesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/broker/quotes?${stringifiedParams}` : `/api/broker/quotes`
+}
+
+/**
+ * @summary Get normalized MT5 quotes
+ */
+export const getBrokerQuotes = async (params?: GetBrokerQuotesParams, options?: Parameters<typeof customFetch>[1]): Promise<NormalizedQuote[]> => {
+
+  return customFetch<NormalizedQuote[]>(getGetBrokerQuotesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrokerQuotesQueryKey = (params?: GetBrokerQuotesParams,) => {
+    return [
+    `/api/broker/quotes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBrokerQuotesQueryOptions = <TData = Awaited<ReturnType<typeof getBrokerQuotes>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>(params?: GetBrokerQuotesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerQuotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrokerQuotesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrokerQuotes>>> = ({ signal }) => getBrokerQuotes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrokerQuotes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrokerQuotesQueryResult = NonNullable<Awaited<ReturnType<typeof getBrokerQuotes>>>
+export type GetBrokerQuotesQueryError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>
+
+
+/**
+ * @summary Get normalized MT5 quotes
+ */
+
+export function useGetBrokerQuotes<TData = Awaited<ReturnType<typeof getBrokerQuotes>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>(
+ params?: GetBrokerQuotesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerQuotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrokerQuotesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBrokerAccountUrl = () => {
+
+
+
+
+  return `/api/broker/account`
+}
+
+/**
+ * @summary Get normalized MT5 account snapshot
+ */
+export const getBrokerAccount = async ( options?: Parameters<typeof customFetch>[1]): Promise<AccountSnapshot> => {
+
+  return customFetch<AccountSnapshot>(getGetBrokerAccountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrokerAccountQueryKey = () => {
+    return [
+    `/api/broker/account`
+    ] as const;
+    }
+
+
+export const getGetBrokerAccountQueryOptions = <TData = Awaited<ReturnType<typeof getBrokerAccount>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerAccount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrokerAccountQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrokerAccount>>> = ({ signal }) => getBrokerAccount({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrokerAccount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrokerAccountQueryResult = NonNullable<Awaited<ReturnType<typeof getBrokerAccount>>>
+export type GetBrokerAccountQueryError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>
+
+
+/**
+ * @summary Get normalized MT5 account snapshot
+ */
+
+export function useGetBrokerAccount<TData = Awaited<ReturnType<typeof getBrokerAccount>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerAccount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrokerAccountQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBrokerPositionsUrl = () => {
+
+
+
+
+  return `/api/broker/positions`
+}
+
+/**
+ * @summary Get normalized MT5 positions
+ */
+export const getBrokerPositions = async ( options?: Parameters<typeof customFetch>[1]): Promise<NormalizedPosition[]> => {
+
+  return customFetch<NormalizedPosition[]>(getGetBrokerPositionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrokerPositionsQueryKey = () => {
+    return [
+    `/api/broker/positions`
+    ] as const;
+    }
+
+
+export const getGetBrokerPositionsQueryOptions = <TData = Awaited<ReturnType<typeof getBrokerPositions>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrokerPositionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrokerPositions>>> = ({ signal }) => getBrokerPositions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrokerPositions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrokerPositionsQueryResult = NonNullable<Awaited<ReturnType<typeof getBrokerPositions>>>
+export type GetBrokerPositionsQueryError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>
+
+
+/**
+ * @summary Get normalized MT5 positions
+ */
+
+export function useGetBrokerPositions<TData = Awaited<ReturnType<typeof getBrokerPositions>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrokerPositionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBrokerHistoryUrl = (params?: GetBrokerHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/broker/history?${stringifiedParams}` : `/api/broker/history`
+}
+
+/**
+ * @summary Get normalized MT5 trade history
+ */
+export const getBrokerHistory = async (params?: GetBrokerHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<NormalizedHistoryEntry[]> => {
+
+  return customFetch<NormalizedHistoryEntry[]>(getGetBrokerHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrokerHistoryQueryKey = (params?: GetBrokerHistoryParams,) => {
+    return [
+    `/api/broker/history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBrokerHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getBrokerHistory>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>(params?: GetBrokerHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrokerHistoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrokerHistory>>> = ({ signal }) => getBrokerHistory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrokerHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrokerHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getBrokerHistory>>>
+export type GetBrokerHistoryQueryError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>
+
+
+/**
+ * @summary Get normalized MT5 trade history
+ */
+
+export function useGetBrokerHistory<TData = Awaited<ReturnType<typeof getBrokerHistory>>, TError = ErrorType<BrokerReadUnauthorizedResponse | BrokerReadForbiddenResponse | BridgeProtocolFailureResponse | BridgeUnavailableResponse>>(
+ params?: GetBrokerHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrokerHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitMt5HeartbeatUrl = () => {
+
+
+
+
+  return `/api/broker/mt5/heartbeat`
+}
+
+/**
+ * @summary Record an authenticated MT5 bridge heartbeat
+ */
+export const submitMt5Heartbeat = async (mt5BridgeHeartbeat: Mt5BridgeHeartbeat, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getSubmitMt5HeartbeatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(mt5BridgeHeartbeat)
+  }
+);}
+
+
+
+
+
+export const getSubmitMt5HeartbeatMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitMt5Heartbeat>>, TError,{data: BodyType<Mt5BridgeHeartbeat>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitMt5Heartbeat>>, TError,{data: BodyType<Mt5BridgeHeartbeat>}, TContext> => {
+
+const mutationKey = ['submitMt5Heartbeat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitMt5Heartbeat>>, {data: BodyType<Mt5BridgeHeartbeat>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitMt5Heartbeat(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitMt5HeartbeatMutationResult = NonNullable<Awaited<ReturnType<typeof submitMt5Heartbeat>>>
+    export type SubmitMt5HeartbeatMutationBody = BodyType<Mt5BridgeHeartbeat>
+    export type SubmitMt5HeartbeatMutationError = ErrorType<void>
+
+    /**
+ * @summary Record an authenticated MT5 bridge heartbeat
+ */
+export const useSubmitMt5Heartbeat = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitMt5Heartbeat>>, TError,{data: BodyType<Mt5BridgeHeartbeat>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitMt5Heartbeat>>,
+        TError,
+        {data: BodyType<Mt5BridgeHeartbeat>},
+        TContext
+      > => {
+      return useMutation(getSubmitMt5HeartbeatMutationOptions(options));
+    }
 

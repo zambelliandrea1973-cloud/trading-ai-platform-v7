@@ -141,12 +141,44 @@ function HistoryIcon() { return <Clock3 size={12} />; }
 
 export function SystemPage() {
   const { t } = useI18n();
-  const query = useHealthCheck(); const online = query.data?.status === 'ok' || query.data?.status === 'healthy';
+  const query = useHealthCheck();
+  const online = query.data?.status === 'ok' || query.data?.status === 'healthy';
   const brokerQuery = useGetBrokerStatus();
   const broker = brokerQuery.data;
-  const services = [[t('system.marketData'), t('system.delayed15m'), true], [t('system.analysisEngine'), t('system.threeBrainsReady'), true], [t('system.paperPersistence'), t('system.unavailable'), false], [t('system.healthEndpoint'), query.isLoading ? t('system.checking') : online ? t('system.healthy') : t('system.mockFallback'), online]];
+  const services = [
+    [t('system.marketData'), t('system.delayed15m'), true],
+    [t('system.analysisEngine'), t('system.threeBrainsReady'), true],
+    [t('system.paperPersistence'), t('system.unavailable'), false],
+    [t('system.healthEndpoint'), query.isLoading ? t('system.checking') : online ? t('system.healthy') : t('system.mockFallback'), online],
+  ];
   const brokerState = broker?.connected ? t('broker.ready') : t('broker.disconnected');
-  return <div className="content-wrap"><PageHeader eyebrow={t('system.eyebrow')} title={t('system.title')} subtitle={t('system.subtitle')} action={<button onClick={() => { query.refetch(); brokerQuery.refetch(); }} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-primary" data-testid="button-refresh-system"><RefreshCw size={14} />{t('system.runChecks')}</button>} /><div className="mb-5 grid gap-3 md:grid-cols-3"><Metric label={t('system.state')} value={t('system.operational')} detail={t('system.surfacesAvailable')} tone="positive" icon={<Wifi size={15} className="text-accent" />} /><Metric label={t('system.freshness')} value={t('system.15min')} detail={t('system.quotesDelayed')} tone="amber" icon={<Timer size={15} className="text-primary" />} /><Metric label={t('system.execLink')} value={t('system.disabled')} detail={t('system.paperOnlyEnv')} icon={<Pause size={15} className="text-muted-foreground" />} /></div><div className="mb-5 panel p-5 md:p-6"><SectionLabel aside={<Badge tone={broker?.connected ? 'positive' : 'amber'}>{broker?.mode === 'paper' ? t('broker.paperOnly') : brokerState}</Badge>}>{t('broker.title')}</SectionLabel><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><p className="text-sm font-semibold text-foreground">{brokerState}</p><p className="mt-1 text-xs text-muted-foreground">{t('broker.bridgeRequired')}</p></div><div className="flex gap-2"><Badge tone="neutral">{broker?.provider?.toUpperCase() ?? 'AXI'}</Badge><Badge tone="neutral">{broker?.venue?.toUpperCase() ?? 'MT5'}</Badge><Badge tone="negative">{t('broker.executionDisabled')}</Badge></div></div></div><div className="panel p-5 md:p-6"><SectionLabel aside={<Badge tone={online ? 'positive' : 'amber'}>{online ? t('system.healthy') : t('system.mockFallback')}</Badge>}>{t('system.serviceChecks')}</SectionLabel><div className="divide-y divide-border">{services.map(([name, status, good]) => <div className="flex items-center justify-between py-4" key={name as string}><div className="flex items-center gap-3"><span className={`h-2 w-2 rounded-full ${good ? 'bg-accent' : 'bg-primary'}`} /><span className="text-sm text-foreground">{name}</span></div><span className={`mono text-xs ${good ? 'text-accent' : 'text-primary'}`}>{status}</span></div>)}</div></div></div>;
+  const healthTone = broker?.health === 'healthy' ? 'positive' : broker?.health === 'degraded' ? 'negative' : 'amber';
+  const formatTimestamp = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value)) : t('broker.noHeartbeat');
+  return <div className="content-wrap">
+    <PageHeader eyebrow={t('system.eyebrow')} title={t('system.title')} subtitle={t('system.subtitle')} action={<button onClick={() => { query.refetch(); brokerQuery.refetch(); }} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-primary" data-testid="button-refresh-system"><RefreshCw size={14} />{t('system.runChecks')}</button>} />
+    <div className="mb-5 grid gap-3 md:grid-cols-3">
+      <Metric label={t('system.state')} value={t('system.operational')} detail={t('system.surfacesAvailable')} tone="positive" icon={<Wifi size={15} className="text-accent" />} />
+      <Metric label={t('system.freshness')} value={t('system.15min')} detail={t('system.quotesDelayed')} tone="amber" icon={<Timer size={15} className="text-primary" />} />
+      <Metric label={t('system.execLink')} value={t('system.disabled')} detail={t('system.paperOnlyEnv')} icon={<Pause size={15} className="text-muted-foreground" />} />
+    </div>
+    <div className="mb-5 panel p-5 md:p-6">
+      <SectionLabel aside={<Badge tone={broker?.connected ? 'positive' : 'amber'}>{broker?.mode === 'paper' ? t('broker.paperOnly') : brokerState}</Badge>}>{t('broker.title')}</SectionLabel>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div><p className="text-sm font-semibold text-foreground">{brokerState}</p><p className="mt-1 text-xs text-muted-foreground">{broker?.message ?? t('broker.bridgeRequired')}</p></div>
+        <div className="flex flex-wrap gap-2"><Badge tone="neutral">{broker?.provider?.toUpperCase() ?? 'AXI'}</Badge><Badge tone="neutral">{broker?.venue?.toUpperCase() ?? 'MT5'}</Badge><Badge tone="negative">{t('broker.executionDisabled')}</Badge></div>
+      </div>
+      <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
+        <div><p className="eyebrow">{t('broker.health')}</p><Badge tone={healthTone}>{broker?.health ?? 'unknown'}</Badge></div>
+        <div><p className="eyebrow">{t('broker.lastHeartbeat')}</p><p className="mt-1 mono text-xs text-foreground">{formatTimestamp(broker?.lastHeartbeatAt)}</p></div>
+        <div><p className="eyebrow">{t('broker.version')}</p><p className="mt-1 mono text-xs text-foreground">{broker?.bridgeVersion ?? '—'}</p></div>
+      </div>
+    </div>
+    <div className="mb-5 panel p-5 md:p-6">
+      <SectionLabel>{t('broker.auditTrail')}</SectionLabel>
+      {broker?.auditTrail?.length ? <div className="divide-y divide-border">{broker.auditTrail.slice(-5).reverse().map((event) => <div className="flex items-start justify-between gap-4 py-3" key={`${event.at}-${event.event}`}><div><p className="mono text-xs text-foreground">{event.event}</p><p className="mt-1 text-xs text-muted-foreground">{event.detail ?? event.actor}</p></div><time className="shrink-0 mono text-[10px] text-muted-foreground">{formatTimestamp(event.at)}</time></div>)}</div> : <p className="text-sm text-muted-foreground">{t('broker.noAudit')}</p>}
+    </div>
+    <div className="panel p-5 md:p-6"><SectionLabel aside={<Badge tone={online ? 'positive' : 'amber'}>{online ? t('system.healthy') : t('system.mockFallback')}</Badge>}>{t('system.serviceChecks')}</SectionLabel><div className="divide-y divide-border">{services.map(([name, status, good]) => <div className="flex items-center justify-between py-4" key={name as string}><div className="flex items-center gap-3"><span className={`h-2 w-2 rounded-full ${good ? 'bg-accent' : 'bg-primary'}`} /><span className="text-sm text-foreground">{name}</span></div><span className={`mono text-xs ${good ? 'text-accent' : 'text-primary'}`}>{status}</span></div>)}</div></div>
+  </div>;
 }
 
 export function SettingsPage() {

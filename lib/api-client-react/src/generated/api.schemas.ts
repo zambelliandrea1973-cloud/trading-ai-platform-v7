@@ -75,6 +75,30 @@ export interface Dashboard {
   warningLevel: string;
 }
 
+export type BrokerStatusHealth = typeof BrokerStatusHealth[keyof typeof BrokerStatusHealth];
+
+
+export const BrokerStatusHealth = {
+  healthy: 'healthy',
+  degraded: 'degraded',
+  unknown: 'unknown',
+} as const;
+
+export type BrokerAuditEventActor = typeof BrokerAuditEventActor[keyof typeof BrokerAuditEventActor];
+
+
+export const BrokerAuditEventActor = {
+  system: 'system',
+  bridge: 'bridge',
+} as const;
+
+export interface BrokerAuditEvent {
+  event: string;
+  at: string;
+  actor: BrokerAuditEventActor;
+  detail?: string;
+}
+
 export interface BrokerStatus {
   provider: string;
   venue: string;
@@ -85,5 +109,121 @@ export interface BrokerStatus {
   bridgeRequired: boolean;
   capabilities: string[];
   message: string;
+  health: BrokerStatusHealth;
+  lastHeartbeatAt?: string;
+  lastHealthCheckAt?: string;
+  bridgeVersion?: string;
+  lastError?: string;
+  auditTrail: BrokerAuditEvent[];
 }
+
+export interface NormalizedQuote {
+  symbol: string;
+  bid: number;
+  ask: number;
+  timestamp: string;
+  spreadPoints?: number;
+}
+
+export interface AccountSnapshot {
+  externalAccountId?: string;
+  balance: number;
+  equity: number;
+  margin?: number;
+  freeMargin?: number;
+  currency: string;
+}
+
+export type NormalizedPositionSide = typeof NormalizedPositionSide[keyof typeof NormalizedPositionSide];
+
+
+export const NormalizedPositionSide = {
+  buy: 'buy',
+  sell: 'sell',
+} as const;
+
+export interface NormalizedPosition {
+  externalId: string;
+  symbol: string;
+  side: NormalizedPositionSide;
+  volume: number;
+  openPrice: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  openedAt: string;
+}
+
+export type NormalizedHistoryEntrySide = typeof NormalizedHistoryEntrySide[keyof typeof NormalizedHistoryEntrySide];
+
+
+export const NormalizedHistoryEntrySide = {
+  buy: 'buy',
+  sell: 'sell',
+} as const;
+
+export type NormalizedHistoryEntryStatus = typeof NormalizedHistoryEntryStatus[keyof typeof NormalizedHistoryEntryStatus];
+
+
+export const NormalizedHistoryEntryStatus = {
+  open: 'open',
+  closed: 'closed',
+  cancelled: 'cancelled',
+} as const;
+
+export interface NormalizedHistoryEntry {
+  externalId: string;
+  symbol: string;
+  side: NormalizedHistoryEntrySide;
+  volume: number;
+  openPrice: number;
+  closePrice?: number;
+  profit?: number;
+  currency?: string;
+  openedAt: string;
+  closedAt?: string;
+  status: NormalizedHistoryEntryStatus;
+}
+
+export type Mt5BridgeHeartbeatStatus = typeof Mt5BridgeHeartbeatStatus[keyof typeof Mt5BridgeHeartbeatStatus];
+
+
+export const Mt5BridgeHeartbeatStatus = {
+  healthy: 'healthy',
+  degraded: 'degraded',
+} as const;
+
+export interface Mt5BridgeHeartbeat {
+  bridgeVersion?: string;
+  status: Mt5BridgeHeartbeatStatus;
+  heartbeatAt: string;
+}
+
+/**
+ * Missing or invalid broker read key
+ */
+export type BrokerReadUnauthorizedResponse = Error;
+
+/**
+ * Broker read network is not allowlisted
+ */
+export type BrokerReadForbiddenResponse = Error;
+
+/**
+ * Bridge returned malformed or rejected protocol data
+ */
+export type BridgeProtocolFailureResponse = Error;
+
+/**
+ * Bridge is unavailable or read access is not configured
+ */
+export type BridgeUnavailableResponse = Error;
+
+export type GetBrokerQuotesParams = {
+symbols?: string;
+};
+
+export type GetBrokerHistoryParams = {
+from?: string;
+to?: string;
+};
 

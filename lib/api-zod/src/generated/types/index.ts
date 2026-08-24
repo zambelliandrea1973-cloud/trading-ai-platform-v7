@@ -6,12 +6,30 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accountSnapshot';
 export * from './assetAnalysis';
 export * from './assetAnalysisIndicators';
 export * from './brainScore';
+export * from './bridgeProtocolFailureResponse';
+export * from './bridgeUnavailableResponse';
+export * from './brokerAuditEvent';
+export * from './brokerAuditEventActor';
+export * from './brokerReadForbiddenResponse';
+export * from './brokerReadUnauthorizedResponse';
 export * from './brokerStatus';
+export * from './brokerStatusHealth';
 export * from './dashboard';
 export * from './error';
+export * from './getBrokerHistoryParams';
+export * from './getBrokerQuotesParams';
 export * from './healthStatus';
 export * from './market';
+export * from './mt5BridgeHeartbeat';
+export * from './mt5BridgeHeartbeatStatus';
+export * from './normalizedHistoryEntry';
+export * from './normalizedHistoryEntrySide';
+export * from './normalizedHistoryEntryStatus';
+export * from './normalizedPosition';
+export * from './normalizedPositionSide';
+export * from './normalizedQuote';
 export * from './opportunity';

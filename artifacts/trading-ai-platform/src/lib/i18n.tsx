@@ -250,6 +250,13 @@ const messages = {
     'broker.paperOnly': 'Solo PAPER',
     'broker.executionDisabled': 'Esecuzione LIVE disabilitata',
     'broker.bridgeRequired': 'Richiede un bridge MT5 separato su Windows/VPS.',
+    'broker.health': 'Salute bridge',
+    'broker.lastHeartbeat': 'Ultimo heartbeat',
+    'broker.lastChecked': 'Ultimo controllo',
+    'broker.noHeartbeat': 'Nessun heartbeat ricevuto',
+    'broker.auditTrail': 'Audit recente',
+    'broker.noAudit': 'Nessun evento bridge registrato',
+    'broker.version': 'Versione bridge',
 
     // Settings
     'settings.eyebrow': 'Controlla / area di lavoro',
@@ -527,6 +534,13 @@ const messages = {
     'broker.paperOnly': 'PAPER only',
     'broker.executionDisabled': 'LIVE execution disabled',
     'broker.bridgeRequired': 'Requires a separate MT5 bridge on Windows/VPS.',
+    'broker.health': 'Bridge health',
+    'broker.lastHeartbeat': 'Last heartbeat',
+    'broker.lastChecked': 'Last check',
+    'broker.noHeartbeat': 'No heartbeat received',
+    'broker.auditTrail': 'Recent audit',
+    'broker.noAudit': 'No bridge events recorded',
+    'broker.version': 'Bridge version',
 
     // Settings
     'settings.eyebrow': 'Control / workspace',
