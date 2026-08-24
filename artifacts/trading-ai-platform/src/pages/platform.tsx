@@ -1,7 +1,7 @@
 import { useState, type FormEvent, useMemo } from 'react';
 import { ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleDot, Clock3, Gauge, Info, LockKeyhole, Pause, Play, Plus, Radio, RefreshCw, ShieldAlert, SlidersHorizontal, Target, Timer, Wifi } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
-import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams } from '@workspace/api-client-react';
+import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, getGetBrokerStatusQueryKey, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams } from '@workspace/api-client-react';
 import { Badge, MarketRow, Metric, Notice, OpportunityCard, PageButton, PageHeader, SectionLabel, StateMessage } from '@/components/common';
 import { useI18n } from '@/lib/i18n';
 
@@ -331,7 +331,7 @@ export function SystemPage() {
   const { t } = useI18n();
   const query = useHealthCheck();
   const online = query.data?.status === 'ok' || query.data?.status === 'healthy';
-  const brokerQuery = useGetBrokerStatus();
+  const brokerQuery = useGetBrokerStatus({ query: { queryKey: getGetBrokerStatusQueryKey(), refetchInterval: 5_000 } });
   const broker = brokerQuery.data;
   const services = [
     [t('system.marketData'), t('system.delayed15m'), true],
@@ -344,6 +344,26 @@ export function SystemPage() {
    const databaseTone = broker?.database?.status === 'healthy' ? 'positive' : broker?.database?.status === 'degraded' ? 'negative' : 'amber';
    const databaseLabel = broker?.database?.status === 'healthy' ? t('broker.persistenceHealthy') : broker?.database?.status === 'degraded' ? t('broker.persistenceDegraded') : t('broker.persistenceUnknown');
    const databaseMessage = broker?.database?.status === 'healthy' ? t('broker.persistenceHealthyMessage') : broker?.database?.status === 'degraded' ? t('broker.persistenceDegradedMessage') : t('broker.persistenceUnknownMessage');
+  const heartbeatAgeMs = broker?.lastHeartbeatAt
+    ? Math.max(0, Date.now() - Date.parse(broker.lastHeartbeatAt))
+    : undefined;
+  const heartbeatState = !broker
+    ? 'unknown'
+    : broker.connected
+      ? 'fresh'
+      : broker.lastHeartbeatAt
+        ? 'stale'
+        : 'missing';
+  const heartbeatTone = heartbeatState === 'fresh' ? 'positive' : heartbeatState === 'stale' ? 'negative' : 'amber';
+  const formatHeartbeatAge = (ageMs?: number) => {
+    if (ageMs === undefined) return t('broker.heartbeatUnknownAge');
+    const totalSeconds = Math.floor(ageMs / 1_000);
+    if (totalSeconds < 60) return `${totalSeconds}${t('broker.seconds')}`;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    if (totalMinutes < 60) return `${totalMinutes}${t('broker.minutes')}`;
+    const totalHours = Math.floor(totalMinutes / 60);
+    return `${totalHours}${t('broker.hours')} ${totalMinutes % 60}${t('broker.minutes')}`;
+  };
   const formatTimestamp = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value)) : t('broker.noHeartbeat');
   return <div className="content-wrap">
     <PageHeader eyebrow={t('system.eyebrow')} title={t('system.title')} subtitle={t('system.subtitle')} action={<button onClick={() => { query.refetch(); brokerQuery.refetch(); }} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-primary" data-testid="button-refresh-system"><RefreshCw size={14} />{t('system.runChecks')}</button>} />
@@ -352,14 +372,17 @@ export function SystemPage() {
       <Metric label={t('system.freshness')} value={t('system.15min')} detail={t('system.quotesDelayed')} tone="amber" icon={<Timer size={15} className="text-primary" />} />
       <Metric label={t('system.execLink')} value={t('system.disabled')} detail={t('system.paperOnlyEnv')} icon={<Pause size={15} className="text-muted-foreground" />} />
     </div>
+    {heartbeatState === 'stale' && <Notice tone="negative"><div><p className="font-semibold">{t('broker.heartbeatStaleTitle')}</p><p className="mt-1">{t('broker.heartbeatStaleDetail')} <strong>{formatHeartbeatAge(heartbeatAgeMs)}</strong>. {t('broker.checkVps')}</p></div></Notice>}
+    {heartbeatState === 'missing' && <Notice><div><p className="font-semibold">{t('broker.heartbeatMissingTitle')}</p><p className="mt-1">{t('broker.heartbeatMissingDetail')} {t('broker.checkVps')}</p></div></Notice>}
     <div className="mb-5 panel p-5 md:p-6">
       <SectionLabel aside={<Badge tone={broker?.connected ? 'positive' : 'amber'}>{broker?.mode === 'paper' ? t('broker.paperOnly') : brokerState}</Badge>}>{t('broker.title')}</SectionLabel>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div><p className="text-sm font-semibold text-foreground">{brokerState}</p><p className="mt-1 text-xs text-muted-foreground">{broker?.message ?? t('broker.bridgeRequired')}</p></div>
         <div className="flex flex-wrap gap-2"><Badge tone="neutral">{broker?.provider?.toUpperCase() ?? 'AXI'}</Badge><Badge tone="neutral">{broker?.venue?.toUpperCase() ?? 'MT5'}</Badge><Badge tone="negative">{t('broker.executionDisabled')}</Badge></div>
       </div>
-       <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-4">
+       <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-5">
         <div><p className="eyebrow">{t('broker.health')}</p><Badge tone={healthTone}>{broker?.health ?? 'unknown'}</Badge></div>
+        <div><p className="eyebrow">{t('broker.heartbeatStatus')}</p><Badge tone={heartbeatTone}>{heartbeatState === 'fresh' ? t('broker.heartbeatFresh') : heartbeatState === 'stale' ? t('broker.heartbeatStale') : heartbeatState === 'missing' ? t('broker.heartbeatMissing') : t('broker.heartbeatUnknown')}</Badge></div>
         <div><p className="eyebrow">{t('broker.lastHeartbeat')}</p><p className="mt-1 mono text-xs text-foreground">{formatTimestamp(broker?.lastHeartbeatAt)}</p></div>
         <div><p className="eyebrow">{t('broker.version')}</p><p className="mt-1 mono text-xs text-foreground">{broker?.bridgeVersion ?? '—'}</p></div>
          <div><p className="eyebrow">{t('broker.auditPersistence')}</p><Badge tone={databaseTone}>{databaseLabel}</Badge><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{databaseMessage}</p></div>
