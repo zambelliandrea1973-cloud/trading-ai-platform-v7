@@ -157,6 +157,17 @@ function bridgeFetch(requests: string[]): typeof fetch {
   };
 }
 
+function response(
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = { "content-type": "application/json" },
+): Response {
+  return new Response(body === undefined ? undefined : JSON.stringify(body), {
+    status,
+    headers,
+  });
+}
+
 async function json(response: Response): Promise<unknown> {
   return response.json();
 }
@@ -291,6 +302,103 @@ test("broker read routes reject a valid key from a non-allowlisted network", asy
       });
     },
   );
+});
+
+test("broker read routes return the documented 502 shape for protocol failures", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(
+    repository,
+    async () => response(200, { quotes: [{ symbol: "EURUSD" }] }),
+  );
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const result = await fetch(`${baseUrl}/api/broker/quotes`, {
+      headers: { "x-broker-read-key": "read-secret" },
+    });
+
+    assert.equal(result.status, 502);
+    assert.deepEqual(await json(result), {
+      error: "quote.bid must be a finite number.",
+    });
+  });
+});
+
+test("broker read routes return the documented 503 shape for bridge outages", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(repository, async () => {
+    throw new Error("connection refused");
+  });
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const result = await fetch(`${baseUrl}/api/broker/account`, {
+      headers: { "x-broker-read-key": "read-secret" },
+    });
+
+    assert.equal(result.status, 503);
+    assert.deepEqual(await json(result), {
+      error: "Bridge request failed: connection refused",
+    });
+  });
+});
+
+test("broker read routes return the documented 500 shape for unexpected adapter failures", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(repository, bridgeFetch([]));
+  adapter.getPositions = async () => {
+    throw new Error("adapter exploded");
+  };
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const result = await fetch(`${baseUrl}/api/broker/positions`, {
+      headers: { "x-broker-read-key": "read-secret" },
+    });
+
+    assert.equal(result.status, 500);
+    assert.deepEqual(await json(result), {
+      error: "Unexpected broker adapter error.",
+    });
+  });
+});
+
+test("broker status returns the documented 500 shape for unexpected adapter failures", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(repository, bridgeFetch([]));
+  adapter.getStatus = async () => {
+    throw new Error("status adapter exploded");
+  };
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const result = await fetch(`${baseUrl}/api/broker/status`);
+
+    assert.equal(result.status, 500);
+    assert.deepEqual(await json(result), {
+      error: "Unexpected broker adapter error.",
+    });
+  });
+});
+
+test("malformed bridge health responses remain a valid blocked status document", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(
+    repository,
+    async () =>
+      response(200, {
+        status: "healthy",
+        heartbeatAt: "not-a-date",
+      }),
+  );
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const result = await fetch(`${baseUrl}/api/broker/status`);
+
+    assert.equal(result.status, 200);
+    const status = GetBrokerStatusResponse.parse(await json(result));
+    assert.equal(status.status, "blocked");
+    assert.equal(status.connected, false);
+    assert.equal(status.health, "degraded");
+    assert.match(status.message, /health check failed/);
+    assert.match(status.lastError ?? "", /health\.heartbeatAt must be a valid ISO date/);
+  });
 });
 
 test("authenticated MT5 heartbeat returns the generated void response", async () => {

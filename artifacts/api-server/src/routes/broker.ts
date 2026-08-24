@@ -28,8 +28,9 @@ export function createBrokerRouter({
   const router: IRouter = Router();
 
   router.get("/broker/status", async (_req, res): Promise<void> => {
-    const status = await adapter.getStatus();
-    res.json(GetBrokerStatusResponse.parse(status));
+    await respondWithBrokerData(res, () =>
+      adapter.getStatus().then((status) => GetBrokerStatusResponse.parse(status)),
+    );
   });
 
   router.get("/broker/quotes", async (req, res): Promise<void> => {
