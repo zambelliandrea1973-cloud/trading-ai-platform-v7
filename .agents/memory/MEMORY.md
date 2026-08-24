@@ -4,4 +4,5 @@
 - [Market-news verification evidence](market-news-verification-evidence.md) — source corroboration is evidence-backed only when publisher URLs, timestamps, and direct event matches are verified.
 - [Ephemeral PostgreSQL validation](ephemeral-postgres-validation.md) — local initdb clusters need an explicit test database before schema push.
 - [Clerk React compatibility](clerk-react-compatibility.md) — Clerk must use a React patch release listed in its peer range; unsupported patches can cause invalid hook calls.
+- [GitHub initial import](github-initial-import.md) — initialize empty repositories before Git-data uploads and avoid burst blob requests through the connector proxy.
 - [Broker read-status persistence](broker-read-status-persistence.md) — preserve broker endpoint outcomes with singleton, endpoint-specific atomic writes; never overwrite a whole snapshot.
