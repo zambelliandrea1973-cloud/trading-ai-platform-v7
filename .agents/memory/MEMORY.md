@@ -1,2 +1,3 @@
 - [Localization approach](localization-approach.md) — Italian and English are first-class UI locales, managed through one central dictionary and persisted user choice.
 - [Axi MT5 integration boundary](axi-mt5-integration.md) — broker work stays behind an explicit MT5 bridge adapter; LIVE execution begins disabled and requires a separate approval stage.
+- [OpenAPI codegen compatibility](openapi-integer-codegen.md) — generated Zod schemas have workspace-specific integer and parameter-export compatibility constraints.

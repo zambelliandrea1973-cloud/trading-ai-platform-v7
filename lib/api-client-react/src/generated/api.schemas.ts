@@ -42,6 +42,98 @@ export interface BrainScore {
 
 export type AssetAnalysisIndicators = {[key: string]: number};
 
+export type AssetAnalysisDataStatus = typeof AssetAnalysisDataStatus[keyof typeof AssetAnalysisDataStatus];
+
+
+export const AssetAnalysisDataStatus = {
+  live: 'live',
+  contextual: 'contextual',
+  degraded: 'degraded',
+} as const;
+
+export type AssetAnalysisNewsSourceStatus = typeof AssetAnalysisNewsSourceStatus[keyof typeof AssetAnalysisNewsSourceStatus];
+
+
+export const AssetAnalysisNewsSourceStatus = {
+  live: 'live',
+  contextual: 'contextual',
+  degraded: 'degraded',
+} as const;
+
+export type NewsItemHorizon = typeof NewsItemHorizon[keyof typeof NewsItemHorizon];
+
+
+export const NewsItemHorizon = {
+  short: 'short',
+  medium: 'medium',
+  long: 'long',
+} as const;
+
+export type NewsItemSentiment = typeof NewsItemSentiment[keyof typeof NewsItemSentiment];
+
+
+export const NewsItemSentiment = {
+  supportive: 'supportive',
+  mixed: 'mixed',
+  adverse: 'adverse',
+} as const;
+
+export interface NewsItem {
+  id: string;
+  publishedAt: string;
+  source: string;
+  title: string;
+  summary: string;
+  symbols: string[];
+  theme: string;
+  horizon: NewsItemHorizon;
+  sentiment: NewsItemSentiment;
+  relevance: number;
+  analysis: string;
+}
+
+export type HistoricalOutcomeHorizon = typeof HistoricalOutcomeHorizon[keyof typeof HistoricalOutcomeHorizon];
+
+
+export const HistoricalOutcomeHorizon = {
+  short: 'short',
+  medium: 'medium',
+  long: 'long',
+} as const;
+
+export interface HistoricalOutcome {
+  horizon: HistoricalOutcomeHorizon;
+  medianReturn: number;
+  positiveRate: number;
+  sampleSize: number;
+}
+
+export interface HistoricalPrecedent {
+  event: string;
+  date: string;
+  matchScore: number;
+  trigger: string;
+  takeaway: string;
+  caveat: string;
+  outcomes: HistoricalOutcome[];
+}
+
+export interface AnalysisThesis {
+  summary: string;
+  short: string;
+  medium: string;
+  long: string;
+  confidence: number;
+  invalidation: string;
+}
+
+export interface AnalysisRiskLimits {
+  maxLossPercent: number;
+  maxExposurePercent: number;
+  positionSizing: string;
+  limitations: string[];
+}
+
 export interface AssetAnalysis {
   symbol: string;
   name: string;
@@ -56,6 +148,28 @@ export interface AssetAnalysis {
   risk: BrainScore;
   indicators: AssetAnalysisIndicators;
   invalidation: string;
+  news: NewsItem[];
+  historicalPrecedents: HistoricalPrecedent[];
+  thesis: AnalysisThesis;
+  riskLimits: AnalysisRiskLimits;
+  dataStatus: AssetAnalysisDataStatus;
+  newsSourceStatus: AssetAnalysisNewsSourceStatus;
+  newsSourceLabel: string;
+}
+
+export type NewsFeedSourceStatus = typeof NewsFeedSourceStatus[keyof typeof NewsFeedSourceStatus];
+
+
+export const NewsFeedSourceStatus = {
+  live: 'live',
+  degraded: 'degraded',
+} as const;
+
+export interface NewsFeed {
+  items: NewsItem[];
+  updatedAt: string;
+  sourceStatus: NewsFeedSourceStatus;
+  sourceLabel: string;
 }
 
 export interface Dashboard {
@@ -232,6 +346,42 @@ export type BridgeProtocolFailureResponse = Error;
  * Bridge is unavailable or read access is not configured
  */
 export type BridgeUnavailableResponse = Error;
+
+export type GetNewsParams = {
+symbol?: string;
+theme?: string;
+horizon?: GetNewsHorizon;
+locale?: GetNewsLocale;
+};
+
+export type GetNewsHorizon = typeof GetNewsHorizon[keyof typeof GetNewsHorizon];
+
+
+export const GetNewsHorizon = {
+  short: 'short',
+  medium: 'medium',
+  long: 'long',
+} as const;
+
+export type GetNewsLocale = typeof GetNewsLocale[keyof typeof GetNewsLocale];
+
+
+export const GetNewsLocale = {
+  it: 'it',
+  en: 'en',
+} as const;
+
+export type GetAssetAnalysisParams = {
+locale?: GetAssetAnalysisLocale;
+};
+
+export type GetAssetAnalysisLocale = typeof GetAssetAnalysisLocale[keyof typeof GetAssetAnalysisLocale];
+
+
+export const GetAssetAnalysisLocale = {
+  it: 'it',
+  en: 'en',
+} as const;
 
 export type GetBrokerQuotesParams = {
 symbols?: string;

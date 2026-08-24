@@ -1,7 +1,7 @@
 import { useState, type FormEvent, useMemo } from 'react';
 import { ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleDot, Clock3, Gauge, Info, LockKeyhole, Pause, Play, Plus, Radio, RefreshCw, ShieldAlert, SlidersHorizontal, Target, Timer, Wifi } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
-import { useGetAssetAnalysis, useGetBrokerStatus, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, type AssetAnalysis, type Dashboard, type Market, type Opportunity } from '@workspace/api-client-react';
+import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams } from '@workspace/api-client-react';
 import { Badge, MarketRow, Metric, Notice, OpportunityCard, PageButton, PageHeader, SectionLabel, StateMessage } from '@/components/common';
 import { useI18n } from '@/lib/i18n';
 
@@ -87,11 +87,69 @@ export function OpportunitiesPage() {
 }
 
 export function AssetPage() {
-  const { t } = useI18n();
-  const params = useParams<{ symbol: string }>(); const symbol = params.symbol || 'SPY'; const query = useGetAssetAnalysis(symbol, { query: { queryKey: ['/api/assets', symbol] } });
-  const fallback: AssetAnalysis = { symbol, name: 'Strumento monitorato', price: 518.42, decision: 'WAIT', confidence: 72, riskLevel: 'Moderato', regime: 'Espansione tardiva', explanation: 'I tre cervelli sono costruttivi ma non unanimi. Il momentum sta migliorando, mentre il cervello del rischio richiede un\'entrata più pulita.', technical: { direction: 'Rialzista', score: 78, confidence: 81, rationale: 'Il prezzo sta recuperando il suo trend a breve termine con ampiezza in miglioramento.' }, fundamental: { direction: 'Neutrale', score: 59, confidence: 64, rationale: 'La stabilità degli utili è solida, anche se la valutazione lascia meno spazio agli errori.' }, risk: { direction: 'Cauto', score: 48, confidence: 77, rationale: 'La volatilità è contenuta; la sensibilità macro rimane il principale fattore di invalidazione.' }, indicators: { RSI_14: 58.4, SMA_20: 514.12, ATR_14: 6.84, breadth: 61.2 }, invalidation: 'Una chiusura giornaliera sotto la media a 20 giorni con ampiezza inferiore al 45%.', };
-  const asset = useMockOr(query.data, fallback); const brain = [{ label: t('asset.techBrain'), data: asset.technical, color: 'text-accent' }, { label: t('asset.fundBrain'), data: asset.fundamental, color: 'text-primary' }, { label: t('asset.riskBrain'), data: asset.risk, color: 'text-[hsl(209_78%_65%)]' }];
-  return <div className="content-wrap"><PageHeader eyebrow={`${t('asset.eyebrow')} / ${asset.symbol}`} title={asset.name} subtitle={t('asset.subtitle')} action={<PageButton href="/simulator">{t('asset.openSimulator')}</PageButton>} /><div className="mb-6 grid gap-4 lg:grid-cols-[1.05fr_1fr_1fr]"><div className="panel p-5"><p className="eyebrow">{t('asset.lastPrice')}</p><p className="mono mt-3 text-4xl text-foreground">{asset.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p><div className="mt-5 flex items-center gap-2"><Badge tone="amber">{asset.decision}</Badge><span className="text-xs text-muted-foreground">{t('asset.modelConfidence')} {asset.confidence}%</span></div></div><div className="panel p-5 lg:col-span-2"><div className="flex items-start justify-between"><div><p className="eyebrow">{t('asset.composite')}</p><h2 className="display mt-2 text-2xl font-bold text-foreground">{asset.decision === 'BUY' ? t('asset.consideredEntry') : t('asset.wait')}</h2></div><Badge tone={asset.riskLevel.toLowerCase().includes('high') || asset.riskLevel.toLowerCase().includes('alto') ? 'negative' : 'positive'}>{t('asset.riskLevel')} {asset.riskLevel.toLowerCase()}</Badge></div><p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{asset.explanation}</p><div className="mt-5 flex items-center gap-4 border-t border-border pt-4"><span className="eyebrow">{t('asset.regime')}</span><span className="mono text-xs text-primary">{asset.regime}</span><span className="ml-auto mono text-xs text-muted-foreground">{t('common.confidence').toLowerCase()} {asset.confidence}%</span></div></div></div><SectionLabel aside={<Badge tone="neutral">{t('asset.directional')}</Badge>}>{t('asset.detail')}</SectionLabel><div className="mb-6 grid gap-3 lg:grid-cols-3">{brain.map(({ label, data, color }) => <div className="panel p-5" key={label}><div className="flex items-center justify-between"><span className="eyebrow">{label}</span><Brain size={15} className={color} /></div><div className="mt-5 flex items-end justify-between"><span className={`mono text-3xl ${color}`}>{data.score}</span><Badge tone={data.direction.toLowerCase().includes('bull') || data.direction.toLowerCase().includes('rialz') ? 'positive' : data.direction.toLowerCase().includes('caut') ? 'amber' : 'neutral'}>{data.direction}</Badge></div><div className="mt-4 h-1 rounded-full bg-secondary"><div className={`h-full rounded-full ${color.replace('text-', 'bg-')}`} style={{ width: `${data.score}%` }} /></div><p className="mt-4 text-xs leading-relaxed text-muted-foreground">{data.rationale}</p><p className="mt-3 mono text-[10px] text-muted-foreground">{t('common.confidence').toLowerCase()} {data.confidence}%</p></div>)}</div><div className="grid gap-5 lg:grid-cols-[1fr_.8fr]"><section className="panel p-5"><SectionLabel>{t('asset.snapshot')}</SectionLabel><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(asset.indicators).map(([key, value]) => <div className="rounded-md bg-secondary/60 p-3" key={key}><p className="eyebrow">{key.replaceAll('_', ' ')}</p><p className="mono mt-2 text-sm text-foreground">{typeof value === 'number' ? value.toFixed(2) : value}</p></div>)}</div></section><Notice tone="negative"><span><strong>{t('asset.invalidation')}:</strong> {asset.invalidation}</span></Notice></div>{query.isError && <p className="mt-4 mono text-[10px] text-primary">{t('asset.mockNotice')}</p>}</div>;
+  const { t, locale } = useI18n();
+  const params = useParams<{ symbol: string }>();
+  const symbol = params.symbol || 'SPY';
+  const analysisParams = { locale };
+  const query = useGetAssetAnalysis(symbol, analysisParams, { query: { queryKey: getGetAssetAnalysisQueryKey(symbol, analysisParams) } });
+
+  const asset = query.data;
+  const brain = asset ? [{ label: t('asset.techBrain'), data: asset.technical, color: 'text-accent' }, { label: t('asset.fundBrain'), data: asset.fundamental, color: 'text-primary' }, { label: t('asset.riskBrain'), data: asset.risk, color: 'text-[hsl(209_78%_65%)]' }] : [];
+
+  return <div className="content-wrap">
+    <PageHeader eyebrow={`${t('asset.eyebrow')} / ${symbol}`} title={asset?.name || symbol} subtitle={t('asset.subtitle')} action={<PageButton href="/simulator">{t('asset.openSimulator')}</PageButton>} />
+    {query.isLoading ? <StateMessage kind="loading" title={t('markets.loading')} body="" /> : query.isError && !asset ? <StateMessage kind="error" title={t('error.title')} body={t('error.desc')} onRetry={() => query.refetch()} /> : asset ? <>
+      <div className="mb-6 grid gap-4 lg:grid-cols-[1.05fr_1fr_1fr]">
+        <div className="panel p-5"><p className="eyebrow">{t('asset.lastPrice')}</p><p className="mono mt-3 text-4xl text-foreground">{asset.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p><div className="mt-5 flex items-center gap-2"><Badge tone={asset.decision.toLowerCase().includes('buy') ? 'positive' : asset.decision.toLowerCase().includes('sell') ? 'negative' : 'amber'}>{asset.decision}</Badge><span className="text-xs text-muted-foreground">{t('asset.modelConfidence')} {asset.confidence}%</span></div></div>
+        <div className="panel p-5 lg:col-span-2"><div className="flex items-start justify-between"><div><p className="eyebrow">{t('asset.composite')}</p><h2 className="display mt-2 text-2xl font-bold text-foreground">{asset.decision === 'BUY' ? t('asset.consideredEntry') : t('asset.wait')}</h2></div><Badge tone={asset.riskLevel.toLowerCase().includes('high') || asset.riskLevel.toLowerCase().includes('alto') ? 'negative' : 'positive'}>{t('asset.riskLevel')} {asset.riskLevel.toLowerCase()}</Badge></div><p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{asset.explanation}</p><div className="mt-5 flex items-center gap-4 border-t border-border pt-4"><span className="eyebrow">{t('asset.regime')}</span><span className="mono text-xs text-primary">{asset.regime}</span><span className="ml-auto mono text-xs text-muted-foreground">{t('common.confidence').toLowerCase()} {asset.confidence}%</span></div></div>
+      </div>
+
+      <SectionLabel aside={<Badge tone="neutral">{t('asset.directional')}</Badge>}>{t('asset.detail')}</SectionLabel>
+      <div className="mb-6 grid gap-3 lg:grid-cols-3">
+        {brain.map(({ label, data, color }) => <div className="panel p-5" key={label}><div className="flex items-center justify-between"><span className="eyebrow">{label}</span><Brain size={15} className={color} /></div><div className="mt-5 flex items-end justify-between"><span className={`mono text-3xl ${color}`}>{data.score}</span><Badge tone={data.direction.toLowerCase().includes('bull') || data.direction.toLowerCase().includes('rialz') ? 'positive' : data.direction.toLowerCase().includes('caut') ? 'amber' : 'neutral'}>{data.direction}</Badge></div><div className="mt-4 h-1 rounded-full bg-secondary"><div className={`h-full rounded-full ${color.replace('text-', 'bg-')}`} style={{ width: `${data.score}%` }} /></div><p className="mt-4 text-xs leading-relaxed text-muted-foreground">{data.rationale}</p><p className="mt-3 mono text-[10px] text-muted-foreground">{t('common.confidence').toLowerCase()} {data.confidence}%</p></div>)}
+      </div>
+
+      <div className="mb-6 grid gap-5 lg:grid-cols-2">
+        <section className="panel p-5">
+          <SectionLabel>{t('asset.thesis')}</SectionLabel>
+          <div className="space-y-4">
+            <div><p className="text-sm font-semibold text-foreground">{t('asset.thesis.summary')}</p><p className="mt-1 text-xs text-muted-foreground">{asset.thesis.summary}</p></div>
+            <div className="grid grid-cols-3 gap-3 border-t border-border pt-4">
+              <div><span className="eyebrow block mb-1">{t('asset.thesis.short')}</span><p className="text-xs text-muted-foreground">{asset.thesis.short}</p></div>
+              <div><span className="eyebrow block mb-1">{t('asset.thesis.medium')}</span><p className="text-xs text-muted-foreground">{asset.thesis.medium}</p></div>
+              <div><span className="eyebrow block mb-1">{t('asset.thesis.long')}</span><p className="text-xs text-muted-foreground">{asset.thesis.long}</p></div>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel p-5">
+          <SectionLabel>{t('asset.riskLimits')}</SectionLabel>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-md bg-secondary/30 p-3"><span className="eyebrow">{t('asset.risk.maxLoss')}</span><p className="mono mt-2 text-xl text-destructive">{asset.riskLimits.maxLossPercent}%</p></div>
+            <div className="rounded-md bg-secondary/30 p-3"><span className="eyebrow">{t('asset.risk.maxExposure')}</span><p className="mono mt-2 text-xl text-primary">{asset.riskLimits.maxExposurePercent}%</p></div>
+          </div>
+          <div className="mt-4 border-t border-border pt-4"><span className="eyebrow">{t('asset.risk.sizing')}</span><p className="mt-1 text-xs text-muted-foreground">{asset.riskLimits.positionSizing}</p></div>
+          <div className="mt-4 border-t border-border pt-4"><span className="eyebrow block mb-2">{t('asset.risk.limitations')}</span><ul className="space-y-1">{asset.riskLimits.limitations.map((limit, idx) => <li key={idx} className="flex gap-2 text-xs text-muted-foreground"><ShieldAlert size={14} className="shrink-0 text-amber-500" />{limit}</li>)}</ul></div>
+        </section>
+      </div>
+
+      <SectionLabel>{t('asset.precedents')}</SectionLabel>
+      <div className="mb-6 space-y-3">
+        {asset.historicalPrecedents.length > 0 ? asset.historicalPrecedents.map((prec, idx) => <div key={idx} className="panel p-5 md:p-6" data-testid={`precedent-${idx}`}><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2 mb-2"><Badge tone="neutral">{t('asset.precedent.match')}: {prec.matchScore}%</Badge><span className="mono text-xs text-muted-foreground">{prec.date}</span></div><h3 className="text-lg font-bold text-foreground">{prec.event}</h3></div><Badge tone="neutral">{t('asset.precedent.trigger')}: {prec.trigger}</Badge></div><div className="mt-4 grid gap-4 md:grid-cols-2"><div className="rounded-md bg-secondary/30 p-4"><span className="eyebrow block mb-1 text-primary">{t('asset.precedent.takeaway')}</span><p className="text-xs text-muted-foreground">{prec.takeaway}</p></div><div className="rounded-md bg-secondary/30 p-4"><span className="eyebrow block mb-1 text-destructive">{t('asset.precedent.caveat')}</span><p className="text-xs text-muted-foreground">{prec.caveat}</p></div></div><div className="mt-5"><span className="eyebrow block mb-3">{t('asset.precedent.outcomes')}</span><div className="grid grid-cols-3 gap-3">{prec.outcomes.map((outcome, oIdx) => <div key={oIdx} className="rounded-md border border-border p-3 flex flex-col justify-between"><span className="eyebrow block mb-2">{outcome.horizon}</span><div className="flex items-end justify-between"><div><span className="text-[10px] text-muted-foreground block">{t('asset.precedent.medianReturn')}</span><span className={`mono text-lg ${outcome.medianReturn >= 0 ? 'text-accent' : 'text-destructive'}`}>{outcome.medianReturn > 0 ? '+' : ''}{outcome.medianReturn}%</span></div><div className="text-right"><span className="text-[10px] text-muted-foreground block">{t('asset.precedent.positiveRate')}</span><span className="mono text-sm text-foreground">{outcome.positiveRate}%</span></div></div></div>)}</div></div></div>) : <Notice><span>{t('asset.noPrecedents')}</span></Notice>}
+      </div>
+
+      <SectionLabel aside={<Badge tone={asset.newsSourceStatus === 'live' ? 'positive' : 'amber'}>{t('asset.newsSource')}: {asset.newsSourceStatus === 'live' ? t('news.source.live') : asset.newsSourceStatus === 'contextual' ? t('news.source.contextual') : t('news.source.degraded')}</Badge>}>{t('asset.news')}</SectionLabel>
+      <p className="mb-3 mono text-[10px] text-muted-foreground">{asset.newsSourceLabel}</p>
+      <div className="mb-6 grid gap-3 md:grid-cols-2">
+        {asset.news.length > 0 ? asset.news.map((item) => <Link href="/news" key={item.id} className="panel panel-hover block p-4" data-testid={`asset-news-${item.id}`}><div className="flex justify-between items-start mb-2"><span className="mono text-xs text-muted-foreground">{item.publishedAt}</span><Badge tone={item.sentiment === 'supportive' ? 'positive' : item.sentiment === 'adverse' ? 'negative' : 'neutral'}>{item.sentiment === 'supportive' ? t('news.sentiment.supportive') : item.sentiment === 'adverse' ? t('news.sentiment.adverse') : t('news.sentiment.mixed')}</Badge></div><h4 className="text-sm font-semibold text-foreground mb-1">{item.title}</h4><p className="text-xs text-muted-foreground line-clamp-2">{item.summary}</p></Link>) : <Notice><span>{t('asset.noNews')}</span></Notice>}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
+        <section className="panel p-5"><SectionLabel>{t('asset.snapshot')}</SectionLabel><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(asset.indicators).map(([key, value]) => <div className="rounded-md bg-secondary/60 p-3" key={key}><p className="eyebrow">{key.replaceAll('_', ' ')}</p><p className="mono mt-2 text-sm text-foreground">{typeof value === 'number' ? value.toFixed(2) : value}</p></div>)}</div></section>
+        <Notice tone="negative"><span><strong>{t('asset.invalidation')}:</strong> {asset.invalidation}</span></Notice>
+      </div>
+    </> : null}
+  </div>;
 }
 
 export function PortfolioPage() {
@@ -115,10 +173,140 @@ export function SimulatorPage() {
 }
 
 export function NewsPage() {
-  const { t } = useI18n();
-  const mockHeadlines = useMemo(() => [['09:18', 'I verbali Fed mantengono il percorso dipendente dai dati', t('news.catMacroRates'), 'L\'ultima lettura mantiene il focus sulla duration e sulla sensibilità azionaria.'], ['08:42', 'L\'ampiezza dei semiconduttori migliora in apertura', t('news.catEquities'), 'La leadership si sta ampliando, ma il movimento è ancora concentrato.'], ['07:56', 'Il paniere del dollaro si ferma dopo tre sessioni al rialzo', t('news.catFxMacro'), 'Un dollaro più calmo rimuove un vento contrario a breve termine per gli asset di rischio.'], [t('news.yesterday'), 'La volatilità del Bitcoin sale con l\'assottigliarsi della liquidità', t('news.catCrypto'), 'La price action è rumorosa; il cervello del rischio rimane in modalità riduzione.']], [t]);
-  const [category, setCategory] = useState(t('news.all')); const cats = [t('news.all'), t('news.catMacroRates'), t('news.catEquities'), t('news.catFxMacro'), t('news.catCrypto')]; const list = category === t('news.all') ? mockHeadlines : mockHeadlines.filter((x) => x[2] === category);
-  return <div className="content-wrap"><PageHeader eyebrow={t('news.eyebrow')} title={t('news.title')} subtitle={t('news.subtitle')} action={<Badge tone="neutral"><Clock3 size={11} />{t('news.updated')}</Badge>} /><div className="mb-5 flex flex-wrap gap-2">{cats.map((item) => <button key={item} onClick={() => setCategory(item)} className={`rounded-md px-3 py-2 text-xs font-semibold ${category === item ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground'}`} data-testid={`button-news-${item.toLowerCase().replaceAll(/[^a-z]+/g, '-')}`}>{item}</button>)}</div><Notice><span><strong>{t('news.mockFeed')}</strong> {t('news.illustrative')}</span></Notice><div className="mt-5 space-y-2">{list.map(([time, title, cat, body], index) => <article className="panel panel-hover grid gap-4 p-5 md:grid-cols-[80px_1fr_180px] md:items-start" key={title}><span className="mono text-xs text-muted-foreground">{time}</span><div><h2 className="text-sm font-semibold text-foreground">{title}</h2><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{body}</p></div><Badge tone={index === 0 ? 'amber' : 'neutral'}>{cat}</Badge></article>)}</div></div>;
+  const { t, locale } = useI18n();
+  const [theme, setTheme] = useState<string>('');
+  const [horizon, setHorizon] = useState<'' | 'short' | 'medium' | 'long'>('');
+
+  const queryParams: GetNewsParams = {
+    locale,
+    ...(theme && theme !== t('news.all') ? { theme } : {}),
+    ...(horizon ? { horizon } : {}),
+  };
+
+  const query = useGetNews(queryParams, { query: { queryKey: getGetNewsQueryKey(queryParams) } });
+
+  const themes = [
+    { value: '', label: t('news.all') },
+    { value: 'Macro / Tassi', label: t('news.catMacroRates') },
+    { value: 'Azionario', label: t('news.catEquities') },
+    { value: 'FX / Macro', label: t('news.catFxMacro') },
+    { value: 'Crypto', label: t('news.catCrypto') },
+    { value: 'Materie prime', label: t('news.catCommodities') },
+  ];
+  const horizons: Array<{ label: string; value: '' | 'short' | 'medium' | 'long' }> = [{ label: t('news.all'), value: '' }, { label: t('news.horizon.short'), value: 'short' }, { label: t('news.horizon.medium'), value: 'medium' }, { label: t('news.horizon.long'), value: 'long' }];
+
+  const feed = query.data;
+
+  return <div className="content-wrap">
+    <PageHeader
+      eyebrow={t('news.eyebrow')}
+      title={t('news.title')}
+      subtitle={t('news.subtitle')}
+      action={
+        feed && (
+          <div className="flex items-center gap-2">
+            <Badge tone={feed.sourceStatus === 'live' ? 'positive' : 'amber'}>
+              {feed.sourceStatus === 'live' ? <Wifi size={11} className="mr-1 inline" /> : <ShieldAlert size={11} className="mr-1 inline" />}
+              {t('news.sourceStatus')}: {feed.sourceStatus === 'live' ? t('news.source.live') : t('news.source.degraded')}
+            </Badge>
+            <Badge tone="neutral">
+              <Clock3 size={11} className="mr-1 inline" />
+              {t('news.updated')} {feed.updatedAt}
+            </Badge>
+          </div>
+        )
+      }
+    />
+    <div className="mb-6 grid gap-4 lg:grid-cols-2">
+      <div>
+        <span className="eyebrow block mb-2">{t('news.theme')}</span>
+        <div className="flex flex-wrap gap-2">
+          {themes.map((item) => (
+            <button
+              key={item.value || 'all'}
+              onClick={() => setTheme(item.value)}
+              className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                theme === item.value ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground transition'
+              }`}
+              data-testid={`button-news-theme-${item.value.toLowerCase().replaceAll(/[^a-z]+/g, '-') || 'all'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className="eyebrow block mb-2">{t('news.horizon')}</span>
+        <div className="flex flex-wrap gap-2">
+          {horizons.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => setHorizon(item.value)}
+              className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                horizon === item.value ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground transition'
+              }`}
+              data-testid={`button-news-horizon-${item.value || 'all'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {query.isLoading ? (
+      <StateMessage kind="loading" title={t('news.title')} body="" />
+    ) : query.isError && !feed ? (
+      <StateMessage kind="error" title={t('error.title')} body={t('error.desc')} onRetry={() => query.refetch()} />
+    ) : (
+      <div className="mt-5 space-y-3">
+        {feed?.items.map((item) => (
+          <article className="panel panel-hover p-5" key={item.id} data-testid={`news-item-${item.id}`}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="mono text-xs text-muted-foreground">{item.publishedAt}</span>
+                <span className="text-xs font-semibold text-muted-foreground">•</span>
+                <span className="text-xs font-semibold text-accent">{item.source}</span>
+              </div>
+              <div className="flex gap-2">
+                <Badge tone={item.sentiment === 'supportive' ? 'positive' : item.sentiment === 'adverse' ? 'negative' : 'neutral'}>
+                  {item.sentiment === 'supportive' ? t('news.sentiment.supportive') : item.sentiment === 'adverse' ? t('news.sentiment.adverse') : t('news.sentiment.mixed')}
+                </Badge>
+                <Badge tone="amber">{item.theme === 'Macro / Tassi' ? t('news.catMacroRates') : item.theme === 'Azionario' ? t('news.catEquities') : item.theme === 'FX / Macro' ? t('news.catFxMacro') : item.theme === 'Materie prime' ? t('news.catCommodities') : item.theme}</Badge>
+              </div>
+            </div>
+            <h2 className="text-lg font-bold text-foreground">{item.title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
+
+            <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+              <div>
+                <span className="eyebrow block mb-2">{t('news.impactAnalysis')}</span>
+                <p className="text-xs leading-relaxed text-muted-foreground">{item.analysis}</p>
+              </div>
+              <div>
+                <span className="eyebrow block mb-2">{t('news.relevance')}</span>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 rounded-full bg-secondary">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${item.relevance}%` }} />
+                  </div>
+                  <span className="mono text-xs text-primary">{item.relevance}%</span>
+                </div>
+                <div className="mt-3">
+                  <span className="eyebrow block mb-1">{t('dashboard.trackedMarkets')}</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {item.symbols.map(sym => <span key={sym} className="mono text-[10px] rounded bg-secondary/50 px-1.5 py-0.5 text-foreground">{sym}</span>)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+        {(!feed?.items || feed.items.length === 0) && (
+          <Notice><span>{t('asset.noNews')}</span></Notice>
+        )}
+      </div>
+    )}
+  </div>;
 }
 
 export function RiskPage() {

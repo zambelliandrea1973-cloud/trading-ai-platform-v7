@@ -68,6 +68,35 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Opportunity"
+  /news:
+    get:
+      operationId: getNews
+      tags: [trading]
+      summary: Get classified live market news
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema: { type: string }
+        - name: theme
+          in: query
+          required: false
+          schema: { type: string }
+        - name: horizon
+          in: query
+          required: false
+          schema: { type: string, enum: [short, medium, long] }
+        - name: locale
+          in: query
+          required: false
+          schema: { type: string, enum: [it, en] }
+      responses:
+        "200":
+          description: Classified news snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsFeed"
   /assets/{symbol}:
     get:
       operationId: getAssetAnalysis
@@ -79,6 +108,10 @@ paths:
           required: true
           schema:
             type: string
+        - name: locale
+          in: query
+          required: false
+          schema: { type: string, enum: [it, en] }
       responses:
         "200":
           description: Asset analysis
@@ -298,7 +331,88 @@ components:
           type: object
           additionalProperties: { type: number }
         invalidation: { type: string }
-      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation]
+        news:
+          type: array
+          items: { $ref: "#/components/schemas/NewsItem" }
+        historicalPrecedents:
+          type: array
+          items: { $ref: "#/components/schemas/HistoricalPrecedent" }
+        thesis:
+          $ref: "#/components/schemas/AnalysisThesis"
+        riskLimits:
+          $ref: "#/components/schemas/AnalysisRiskLimits"
+        dataStatus: { type: string, enum: [live, contextual, degraded] }
+        newsSourceStatus: { type: string, enum: [live, contextual, degraded] }
+        newsSourceLabel: { type: string }
+      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation, news, historicalPrecedents, thesis, riskLimits, dataStatus, newsSourceStatus, newsSourceLabel]
+    NewsFeed:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NewsItem" }
+        updatedAt: { type: string, format: date-time }
+        sourceStatus: { type: string, enum: [live, degraded] }
+        sourceLabel: { type: string }
+      required: [items, updatedAt, sourceStatus, sourceLabel]
+    NewsItem:
+      type: object
+      properties:
+        id: { type: string }
+        publishedAt: { type: string, format: date-time }
+        source: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        symbols:
+          type: array
+          items: { type: string }
+        theme: { type: string }
+        horizon: { type: string, enum: [short, medium, long] }
+        sentiment: { type: string, enum: [supportive, mixed, adverse] }
+        relevance: { type: number }
+        analysis: { type: string }
+      required: [id, publishedAt, source, title, summary, symbols, theme, horizon, sentiment, relevance, analysis]
+    HistoricalPrecedent:
+      type: object
+      properties:
+        event: { type: string }
+        date: { type: string, format: date }
+        matchScore: { type: number }
+        trigger: { type: string }
+        takeaway: { type: string }
+        caveat: { type: string }
+        outcomes:
+          type: array
+          items: { $ref: "#/components/schemas/HistoricalOutcome" }
+      required: [event, date, matchScore, trigger, takeaway, caveat, outcomes]
+    HistoricalOutcome:
+      type: object
+      properties:
+        horizon: { type: string, enum: [short, medium, long] }
+        medianReturn: { type: number }
+        positiveRate: { type: number }
+        sampleSize: { type: number }
+      required: [horizon, medianReturn, positiveRate, sampleSize]
+    AnalysisThesis:
+      type: object
+      properties:
+        summary: { type: string }
+        short: { type: string }
+        medium: { type: string }
+        long: { type: string }
+        confidence: { type: number }
+        invalidation: { type: string }
+      required: [summary, short, medium, long, confidence, invalidation]
+    AnalysisRiskLimits:
+      type: object
+      properties:
+        maxLossPercent: { type: number }
+        maxExposurePercent: { type: number }
+        positionSizing: { type: string }
+        limitations:
+          type: array
+          items: { type: string }
+      required: [maxLossPercent, maxExposurePercent, positionSizing, limitations]
     Dashboard:
       type: object
       properties:

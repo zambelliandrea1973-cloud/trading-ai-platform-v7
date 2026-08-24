@@ -29,11 +29,14 @@ import type {
   BrokerStatus,
   Dashboard,
   Error,
+  GetAssetAnalysisParams,
   GetBrokerHistoryParams,
   GetBrokerQuotesParams,
+  GetNewsParams,
   HealthStatus,
   Market,
   Mt5BridgeHeartbeat,
+  NewsFeed,
   NormalizedHistoryEntry,
   NormalizedPosition,
   NormalizedQuote,
@@ -376,20 +379,27 @@ export function useGetOpportunities<TData = Awaited<ReturnType<typeof getOpportu
 
 
 
-export const getGetAssetAnalysisUrl = (symbol: string,) => {
+export const getGetNewsUrl = (params?: GetNewsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/assets/${symbol}`
+  return stringifiedParams.length > 0 ? `/api/news?${stringifiedParams}` : `/api/news`
 }
 
 /**
- * @summary Get explainable asset analysis
+ * @summary Get classified live market news
  */
-export const getAssetAnalysis = async (symbol: string, options?: Parameters<typeof customFetch>[1]): Promise<AssetAnalysis> => {
+export const getNews = async (params?: GetNewsParams, options?: Parameters<typeof customFetch>[1]): Promise<NewsFeed> => {
 
-  return customFetch<AssetAnalysis>(getGetAssetAnalysisUrl(symbol),
+  return customFetch<NewsFeed>(getGetNewsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -402,23 +412,111 @@ export const getAssetAnalysis = async (symbol: string, options?: Parameters<type
 
 
 
-export const getGetAssetAnalysisQueryKey = (symbol: string,) => {
+export const getGetNewsQueryKey = (params?: GetNewsParams,) => {
     return [
-    `/api/assets/${symbol}`
+    `/api/news`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetAssetAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getAssetAnalysis>>, TError = ErrorType<Error>>(symbol: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetNewsQueryOptions = <TData = Awaited<ReturnType<typeof getNews>>, TError = ErrorType<unknown>>(params?: GetNewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetAssetAnalysisQueryKey(symbol);
+  const queryKey =  queryOptions?.queryKey ?? getGetNewsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssetAnalysis>>> = ({ signal }) => getAssetAnalysis(symbol, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNews>>> = ({ signal }) => getNews(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNewsQueryResult = NonNullable<Awaited<ReturnType<typeof getNews>>>
+export type GetNewsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get classified live market news
+ */
+
+export function useGetNews<TData = Awaited<ReturnType<typeof getNews>>, TError = ErrorType<unknown>>(
+ params?: GetNewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNewsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAssetAnalysisUrl = (symbol: string,
+    params?: GetAssetAnalysisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/assets/${symbol}?${stringifiedParams}` : `/api/assets/${symbol}`
+}
+
+/**
+ * @summary Get explainable asset analysis
+ */
+export const getAssetAnalysis = async (symbol: string,
+    params?: GetAssetAnalysisParams, options?: Parameters<typeof customFetch>[1]): Promise<AssetAnalysis> => {
+
+  return customFetch<AssetAnalysis>(getGetAssetAnalysisUrl(symbol,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssetAnalysisQueryKey = (symbol: string,
+    params?: GetAssetAnalysisParams,) => {
+    return [
+    `/api/assets/${symbol}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAssetAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getAssetAnalysis>>, TError = ErrorType<Error>>(symbol: string,
+    params?: GetAssetAnalysisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssetAnalysisQueryKey(symbol,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssetAnalysis>>> = ({ signal }) => getAssetAnalysis(symbol,params, { signal, ...requestOptions });
 
 
 
@@ -436,11 +534,12 @@ export type GetAssetAnalysisQueryError = ErrorType<Error>
  */
 
 export function useGetAssetAnalysis<TData = Awaited<ReturnType<typeof getAssetAnalysis>>, TError = ErrorType<Error>>(
- symbol: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ symbol: string,
+    params?: GetAssetAnalysisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetAssetAnalysisQueryOptions(symbol,options)
+  const queryOptions = getGetAssetAnalysisQueryOptions(symbol,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

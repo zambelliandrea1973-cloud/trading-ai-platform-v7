@@ -5,8 +5,14 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AnalysisRiskLimits } from './analysisRiskLimits';
+import type { AnalysisThesis } from './analysisThesis';
+import type { AssetAnalysisDataStatus } from './assetAnalysisDataStatus';
 import type { AssetAnalysisIndicators } from './assetAnalysisIndicators';
+import type { AssetAnalysisNewsSourceStatus } from './assetAnalysisNewsSourceStatus';
 import type { BrainScore } from './brainScore';
+import type { HistoricalPrecedent } from './historicalPrecedent';
+import type { NewsItem } from './newsItem';
 
 export interface AssetAnalysis {
   symbol: string;
@@ -22,4 +28,11 @@ export interface AssetAnalysis {
   risk: BrainScore;
   indicators: AssetAnalysisIndicators;
   invalidation: string;
+  news: NewsItem[];
+  historicalPrecedents: HistoricalPrecedent[];
+  thesis: AnalysisThesis;
+  riskLimits: AnalysisRiskLimits;
+  dataStatus: AssetAnalysisDataStatus;
+  newsSourceStatus: AssetAnalysisNewsSourceStatus;
+  newsSourceLabel: string;
 }

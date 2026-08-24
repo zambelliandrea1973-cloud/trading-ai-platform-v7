@@ -76,10 +76,44 @@ export const GetOpportunitiesResponse = zod.array(GetOpportunitiesResponseItem)
 
 
 /**
+ * @summary Get classified live market news
+ */
+export const GetNewsQueryParams = zod.object({
+  "symbol": zod.coerce.string().optional(),
+  "theme": zod.coerce.string().optional(),
+  "horizon": zod.enum(['short', 'medium', 'long']).optional(),
+  "locale": zod.enum(['it', 'en']).optional()
+})
+
+export const GetNewsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "publishedAt": zod.coerce.date(),
+  "source": zod.string(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "symbols": zod.array(zod.string()),
+  "theme": zod.string(),
+  "horizon": zod.enum(['short', 'medium', 'long']),
+  "sentiment": zod.enum(['supportive', 'mixed', 'adverse']),
+  "relevance": zod.number(),
+  "analysis": zod.string()
+})),
+  "updatedAt": zod.coerce.date(),
+  "sourceStatus": zod.enum(['live', 'degraded']),
+  "sourceLabel": zod.string()
+})
+
+
+/**
  * @summary Get explainable asset analysis
  */
-export const GetAssetAnalysisParams = zod.object({
+export const GetAssetAnalysisParamsSchema = zod.object({
   "symbol": zod.coerce.string()
+})
+
+export const GetAssetAnalysisQueryParams = zod.object({
+  "locale": zod.enum(['it', 'en']).optional()
 })
 
 export const GetAssetAnalysisResponse = zod.object({
@@ -110,7 +144,51 @@ export const GetAssetAnalysisResponse = zod.object({
   "rationale": zod.string()
 }),
   "indicators": zod.record(zod.string(), zod.number()),
+  "invalidation": zod.string(),
+  "news": zod.array(zod.object({
+  "id": zod.string(),
+  "publishedAt": zod.coerce.date(),
+  "source": zod.string(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "symbols": zod.array(zod.string()),
+  "theme": zod.string(),
+  "horizon": zod.enum(['short', 'medium', 'long']),
+  "sentiment": zod.enum(['supportive', 'mixed', 'adverse']),
+  "relevance": zod.number(),
+  "analysis": zod.string()
+})),
+  "historicalPrecedents": zod.array(zod.object({
+  "event": zod.string(),
+  "date": zod.coerce.date(),
+  "matchScore": zod.number(),
+  "trigger": zod.string(),
+  "takeaway": zod.string(),
+  "caveat": zod.string(),
+  "outcomes": zod.array(zod.object({
+  "horizon": zod.enum(['short', 'medium', 'long']),
+  "medianReturn": zod.number(),
+  "positiveRate": zod.number(),
+  "sampleSize": zod.number()
+}))
+})),
+  "thesis": zod.object({
+  "summary": zod.string(),
+  "short": zod.string(),
+  "medium": zod.string(),
+  "long": zod.string(),
+  "confidence": zod.number(),
   "invalidation": zod.string()
+}),
+  "riskLimits": zod.object({
+  "maxLossPercent": zod.number(),
+  "maxExposurePercent": zod.number(),
+  "positionSizing": zod.string(),
+  "limitations": zod.array(zod.string())
+}),
+  "dataStatus": zod.enum(['live', 'contextual', 'degraded']),
+  "newsSourceStatus": zod.enum(['live', 'contextual', 'degraded']),
+  "newsSourceLabel": zod.string()
 })
 
 
