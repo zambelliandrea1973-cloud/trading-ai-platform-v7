@@ -12,7 +12,11 @@ import {
   type NormalizedPosition,
   type NormalizedQuote,
 } from "./contract";
-import { bridgeAuditStore, type BridgeAuditStore } from "./audit-store";
+import {
+  bridgeAuditStore,
+  type BridgeAuditStore,
+  type BrokerDataStatusSnapshot,
+} from "./audit-store";
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_HEARTBEAT_TTL_MS = 30_000;
@@ -65,7 +69,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
   private bridgeVersion: string | undefined;
   private lastError: string | undefined;
   private health: BrokerStatus["health"] = "unknown";
-  private readonly dataStatus: BrokerStatus["dataStatus"] = {
+  private dataStatus: BrokerStatus["dataStatus"] = {
     quotes: { status: "unknown" },
     account: { status: "unknown" },
     positions: { status: "unknown" },
@@ -131,8 +135,12 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
   }
 
   async getStatus(): Promise<BrokerStatus> {
-    const persistedAuditTrail = await this.auditStore.list();
+    const [persistedAuditTrail, persistedDataStatus] = await Promise.all([
+      this.auditStore.list(),
+      this.auditStore.loadDataStatus(),
+    ]);
     this.auditTrail = persistedAuditTrail;
+    this.dataStatus = persistedDataStatus;
     if (this.configurationError) {
       return this.status("blocked", this.configurationError);
     }
@@ -259,21 +267,31 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
     await this.recordAudit(event, "system", detail);
   }
 
-  recordDataReadSuccess(endpoint: BrokerDataEndpoint): void {
-    this.dataStatus[endpoint] = {
-      status: "available",
-      lastCheckedAt: this.now().toISOString(),
-    };
+  async recordDataReadSuccess(endpoint: BrokerDataEndpoint): Promise<void> {
+    const snapshot = {
+      ...this.dataStatus,
+      [endpoint]: {
+        status: "available",
+        lastCheckedAt: this.now().toISOString(),
+      },
+    } as BrokerDataStatusSnapshot;
+    this.dataStatus = snapshot;
+    await this.auditStore.saveDataStatus(endpoint, snapshot[endpoint]);
   }
 
-  recordDataReadFailure(
+  async recordDataReadFailure(
     endpoint: BrokerDataEndpoint,
     status: Exclude<BrokerDataReadStatus, "available" | "unknown">,
-  ): void {
-    this.dataStatus[endpoint] = {
-      status,
-      lastCheckedAt: this.now().toISOString(),
-    };
+  ): Promise<void> {
+    const snapshot = {
+      ...this.dataStatus,
+      [endpoint]: {
+        status,
+        lastCheckedAt: this.now().toISOString(),
+      },
+    } as BrokerDataStatusSnapshot;
+    this.dataStatus = snapshot;
+    await this.auditStore.saveDataStatus(endpoint, snapshot[endpoint]);
   }
 
   private async request<T>(path: string): Promise<T> {

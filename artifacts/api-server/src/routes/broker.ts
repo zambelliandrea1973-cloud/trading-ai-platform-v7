@@ -153,20 +153,20 @@ async function respondWithBrokerData(
 ): Promise<void> {
   try {
     const data = await operation();
-    if (adapter && endpoint) adapter.recordDataReadSuccess(endpoint);
+    if (adapter && endpoint) await adapter.recordDataReadSuccess(endpoint);
     res.json(data);
   } catch (error) {
     if (error instanceof BrokerProtocolError) {
-      if (adapter && endpoint) adapter.recordDataReadFailure(endpoint, "malformed");
+      if (adapter && endpoint) await adapter.recordDataReadFailure(endpoint, "malformed");
       res.status(502).json({ error: error.message });
       return;
     }
     if (error instanceof BrokerUnavailableError) {
-      if (adapter && endpoint) adapter.recordDataReadFailure(endpoint, "unavailable");
+      if (adapter && endpoint) await adapter.recordDataReadFailure(endpoint, "unavailable");
       res.status(503).json({ error: error.message });
       return;
     }
-    if (adapter && endpoint) adapter.recordDataReadFailure(endpoint, "error");
+    if (adapter && endpoint) await adapter.recordDataReadFailure(endpoint, "error");
     res.status(500).json({ error: "Unexpected broker adapter error." });
   }
 }

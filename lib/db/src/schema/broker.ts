@@ -31,6 +31,32 @@ export const auditEventsTable = pgTable("audit_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Singleton operational snapshot for safe broker read outcomes.
+ *
+ * This deliberately stores categories and timestamps only. It must never
+ * contain bridge responses, endpoint URLs, credentials, or error text.
+ */
+export const brokerDataStatusTable = pgTable("broker_data_status", {
+  mode: text("mode").primaryKey(),
+  quotesStatus: text("quotes_status").notNull().default("unknown"),
+  quotesLastCheckedAt: timestamp("quotes_last_checked_at", { withTimezone: true }),
+  accountStatus: text("account_status").notNull().default("unknown"),
+  accountLastCheckedAt: timestamp("account_last_checked_at", { withTimezone: true }),
+  positionsStatus: text("positions_status").notNull().default("unknown"),
+  positionsLastCheckedAt: timestamp("positions_last_checked_at", {
+    withTimezone: true,
+  }),
+  historyStatus: text("history_status").notNull().default("unknown"),
+  historyLastCheckedAt: timestamp("history_last_checked_at", {
+    withTimezone: true,
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
 export const insertAuditEventSchema = createInsertSchema(auditEventsTable).omit({
   id: true,
   createdAt: true,

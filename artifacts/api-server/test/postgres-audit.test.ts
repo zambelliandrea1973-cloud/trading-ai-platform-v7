@@ -83,7 +83,9 @@ test("PostgreSQL audit schema persists heartbeats and security rejections", asyn
     const { BridgeAuditStore } = await import(
       "../src/lib/broker/audit-store"
     );
-    const { pool } = await import("@workspace/db");
+    const { auditEventsTable, brokerDataStatusTable, db, pool } = await import(
+      "@workspace/db"
+    );
     try {
       const auditStore = new BridgeAuditStore();
 
@@ -115,6 +117,35 @@ test("PostgreSQL audit schema persists heartbeats and security rejections", asyn
         },
       ]);
       assert.equal(auditStore.getState().status, "healthy");
+
+      await db.delete(brokerDataStatusTable);
+      const latestDataStatus = {
+        quotes: {
+          status: "unavailable" as const,
+          lastCheckedAt: "2026-08-24T12:00:03.000Z",
+        },
+        account: { status: "unknown" as const },
+        positions: { status: "unknown" as const },
+        history: { status: "unknown" as const },
+      };
+      const secondAuditStore = new BridgeAuditStore();
+      await Promise.all([
+        auditStore.saveDataStatus("quotes", latestDataStatus.quotes),
+        secondAuditStore.saveDataStatus("account", {
+          status: "available",
+          lastCheckedAt: "2026-08-24T12:00:02.000Z",
+        }),
+      ]);
+
+      const restartedAuditStore = new BridgeAuditStore();
+      assert.deepEqual(await restartedAuditStore.loadDataStatus(), {
+        ...latestDataStatus,
+        account: {
+          status: "available",
+          lastCheckedAt: "2026-08-24T12:00:02.000Z",
+        },
+      });
+      assert.equal((await db.select().from(brokerDataStatusTable)).length, 1);
     } finally {
       await pool.end();
     }

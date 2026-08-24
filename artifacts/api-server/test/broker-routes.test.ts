@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import {
   BridgeAuditStore,
+  type BrokerDataStatusSnapshot,
   type BridgeAuditRepository,
 } from "../src/lib/broker/audit-store";
 import {
@@ -37,6 +38,7 @@ const NOW = new Date("2026-08-24T12:00:00.000Z");
 
 class MemoryAuditRepository implements BridgeAuditRepository {
   readonly events: BrokerAuditEvent[] = [];
+  dataStatus: BrokerDataStatusSnapshot | undefined;
 
   async list(): Promise<BrokerAuditEvent[]> {
     return this.events.slice(-25);
@@ -44,6 +46,25 @@ class MemoryAuditRepository implements BridgeAuditRepository {
 
   async append(event: BrokerAuditEvent): Promise<void> {
     this.events.push(event);
+  }
+
+  async loadDataStatus(): Promise<BrokerDataStatusSnapshot | undefined> {
+    return this.dataStatus;
+  }
+
+  async saveDataStatus(
+    endpoint: keyof BrokerDataStatusSnapshot,
+    dataStatus: BrokerDataStatusSnapshot[keyof BrokerDataStatusSnapshot],
+  ): Promise<void> {
+    this.dataStatus = {
+      ...(this.dataStatus ?? {
+        quotes: { status: "unknown" },
+        account: { status: "unknown" },
+        positions: { status: "unknown" },
+        history: { status: "unknown" },
+      }),
+      [endpoint]: dataStatus,
+    };
   }
 }
 
@@ -404,6 +425,73 @@ test("broker status exposes safe read failure categories without error details",
     );
     assert.equal(JSON.stringify(status.dataStatus).includes("private"), false);
     assert.equal(JSON.stringify(status.dataStatus).includes("stack trace"), false);
+  });
+});
+
+test("broker status restores the latest safe read state after an API restart", async () => {
+  const repository = new MemoryAuditRepository();
+  const firstAdapter = configuredAdapter(repository, bridgeFetch([]));
+  const headers = { "x-broker-read-key": "read-secret" };
+
+  await withRouter(firstAdapter, READ_ENV, async (baseUrl) => {
+    for (const endpoint of ["quotes", "account", "positions", "history"]) {
+      const response = await fetch(`${baseUrl}/api/broker/${endpoint}`, { headers });
+      assert.equal(response.status, 200, endpoint);
+    }
+  });
+
+  const restartedAdapter = configuredAdapter(repository, bridgeFetch([]));
+  await withRouter(restartedAdapter, READ_ENV, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/broker/status`);
+    assert.equal(response.status, 200);
+    const status = GetBrokerStatusResponse.parse(await json(response));
+
+    for (const endpoint of ["quotes", "account", "positions", "history"] as const) {
+      assert.equal(status.dataStatus[endpoint].status, "available", endpoint);
+      assert.deepEqual(status.dataStatus[endpoint].lastCheckedAt, NOW, endpoint);
+    }
+    assert.equal(JSON.stringify(status.dataStatus).includes("bridge-secret"), false);
+    assert.equal(JSON.stringify(status.dataStatus).includes("bridge.example.test"), false);
+  });
+});
+
+test("broker status retains only the newest snapshot and resets when none is persisted", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(repository, bridgeFetch([]));
+  const headers = { "x-broker-read-key": "read-secret" };
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const success = await fetch(`${baseUrl}/api/broker/quotes`, { headers });
+    assert.equal(success.status, 200);
+
+    adapter.getQuotes = async () => {
+      throw new BrokerUnavailableError("private bridge URL should not persist");
+    };
+    const failure = await fetch(`${baseUrl}/api/broker/quotes`, { headers });
+    assert.equal(failure.status, 503);
+  });
+
+  assert.equal(repository.dataStatus?.quotes.status, "unavailable");
+  assert.equal(repository.dataStatus?.quotes.lastCheckedAt, NOW.toISOString());
+
+  const restartedAdapter = configuredAdapter(repository, bridgeFetch([]));
+  await withRouter(restartedAdapter, READ_ENV, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/broker/status`);
+    const status = GetBrokerStatusResponse.parse(await json(response));
+    assert.equal(status.dataStatus.quotes.status, "unavailable");
+    assert.deepEqual(status.dataStatus.quotes.lastCheckedAt, NOW);
+  });
+
+  repository.dataStatus = undefined;
+  const resetAdapter = configuredAdapter(repository, bridgeFetch([]));
+  await withRouter(resetAdapter, READ_ENV, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/broker/status`);
+    const status = GetBrokerStatusResponse.parse(await json(response));
+
+    for (const endpoint of ["quotes", "account", "positions", "history"] as const) {
+      assert.equal(status.dataStatus[endpoint].status, "unknown", endpoint);
+      assert.equal(status.dataStatus[endpoint].lastCheckedAt, undefined, endpoint);
+    }
   });
 });
 

@@ -5,6 +5,7 @@ import express from "express";
 import type { BrokerAuditEvent } from "../src/lib/broker/contract";
 import {
   BridgeAuditStore,
+  type BrokerDataStatusSnapshot,
   type BridgeAuditRepository,
 } from "../src/lib/broker/audit-store";
 import { Mt5BridgeAdapter } from "../src/lib/broker/mt5-bridge-adapter";
@@ -18,6 +19,7 @@ const BRIDGE_ENV = {
 
 class MemoryAuditRepository implements BridgeAuditRepository {
   readonly events: BrokerAuditEvent[] = [];
+  dataStatus: BrokerDataStatusSnapshot | undefined;
   unavailable = false;
 
   async list(): Promise<BrokerAuditEvent[]> {
@@ -28,6 +30,27 @@ class MemoryAuditRepository implements BridgeAuditRepository {
   async append(event: BrokerAuditEvent): Promise<void> {
     if (this.unavailable) throw new Error("database unavailable");
     this.events.push(event);
+  }
+
+  async loadDataStatus(): Promise<BrokerDataStatusSnapshot | undefined> {
+    if (this.unavailable) throw new Error("database unavailable");
+    return this.dataStatus;
+  }
+
+  async saveDataStatus(
+    endpoint: keyof BrokerDataStatusSnapshot,
+    dataStatus: BrokerDataStatusSnapshot[keyof BrokerDataStatusSnapshot],
+  ): Promise<void> {
+    if (this.unavailable) throw new Error("database unavailable");
+    this.dataStatus = {
+      ...(this.dataStatus ?? {
+        quotes: { status: "unknown" },
+        account: { status: "unknown" },
+        positions: { status: "unknown" },
+        history: { status: "unknown" },
+      }),
+      [endpoint]: dataStatus,
+    };
   }
 }
 
