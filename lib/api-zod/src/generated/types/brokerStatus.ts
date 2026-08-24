@@ -7,6 +7,7 @@
  */
 import type { BrokerAuditEvent } from './brokerAuditEvent';
 import type { BrokerDatabaseStatus } from './brokerDatabaseStatus';
+import type { BrokerStatusDataStatus } from './brokerStatusDataStatus';
 import type { BrokerStatusHealth } from './brokerStatusHealth';
 
 export interface BrokerStatus {
@@ -26,4 +27,5 @@ export interface BrokerStatus {
   lastError?: string;
   auditTrail: BrokerAuditEvent[];
   database: BrokerDatabaseStatus;
+  dataStatus: BrokerStatusDataStatus;
 }

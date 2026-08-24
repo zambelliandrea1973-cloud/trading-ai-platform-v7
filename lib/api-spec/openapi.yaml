@@ -534,7 +534,21 @@ components:
           items: { $ref: "#/components/schemas/BrokerAuditEvent" }
         database:
           $ref: "#/components/schemas/BrokerDatabaseStatus"
-      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message, health, auditTrail, database]
+        dataStatus:
+          type: object
+          properties:
+            quotes: { $ref: "#/components/schemas/BrokerDataStatus" }
+            account: { $ref: "#/components/schemas/BrokerDataStatus" }
+            positions: { $ref: "#/components/schemas/BrokerDataStatus" }
+            history: { $ref: "#/components/schemas/BrokerDataStatus" }
+          required: [quotes, account, positions, history]
+      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message, health, auditTrail, database, dataStatus]
+    BrokerDataStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [available, unavailable, malformed, error, unknown] }
+        lastCheckedAt: { type: string, format: date-time }
+      required: [status]
     BrokerAuditEvent:
       type: object
       properties:

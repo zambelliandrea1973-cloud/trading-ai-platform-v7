@@ -274,6 +274,29 @@ export const BrokerStatusHealth = {
   unknown: 'unknown',
 } as const;
 
+export type BrokerDataStatusStatus = typeof BrokerDataStatusStatus[keyof typeof BrokerDataStatusStatus];
+
+
+export const BrokerDataStatusStatus = {
+  available: 'available',
+  unavailable: 'unavailable',
+  malformed: 'malformed',
+  error: 'error',
+  unknown: 'unknown',
+} as const;
+
+export interface BrokerDataStatus {
+  status: BrokerDataStatusStatus;
+  lastCheckedAt?: string;
+}
+
+export type BrokerStatusDataStatus = {
+  quotes: BrokerDataStatus;
+  account: BrokerDataStatus;
+  positions: BrokerDataStatus;
+  history: BrokerDataStatus;
+};
+
 export type BrokerAuditEventActor = typeof BrokerAuditEventActor[keyof typeof BrokerAuditEventActor];
 
 
@@ -320,6 +343,7 @@ export interface BrokerStatus {
   lastError?: string;
   auditTrail: BrokerAuditEvent[];
   database: BrokerDatabaseStatus;
+  dataStatus: BrokerStatusDataStatus;
 }
 
 export interface NormalizedQuote {

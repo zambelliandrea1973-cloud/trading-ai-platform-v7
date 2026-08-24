@@ -285,6 +285,24 @@ export const GetBrokerStatusResponse = zod.object({
   "database": zod.object({
   "status": zod.enum(['healthy', 'degraded', 'unknown']),
   "message": zod.string()
+}),
+  "dataStatus": zod.object({
+  "quotes": zod.object({
+  "status": zod.enum(['available', 'unavailable', 'malformed', 'error', 'unknown']),
+  "lastCheckedAt": zod.coerce.date().optional()
+}),
+  "account": zod.object({
+  "status": zod.enum(['available', 'unavailable', 'malformed', 'error', 'unknown']),
+  "lastCheckedAt": zod.coerce.date().optional()
+}),
+  "positions": zod.object({
+  "status": zod.enum(['available', 'unavailable', 'malformed', 'error', 'unknown']),
+  "lastCheckedAt": zod.coerce.date().optional()
+}),
+  "history": zod.object({
+  "status": zod.enum(['available', 'unavailable', 'malformed', 'error', 'unknown']),
+  "lastCheckedAt": zod.coerce.date().optional()
+})
 })
 })
 

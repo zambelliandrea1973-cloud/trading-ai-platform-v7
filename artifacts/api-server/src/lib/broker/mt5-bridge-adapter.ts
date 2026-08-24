@@ -4,6 +4,8 @@ import {
   type AccountSnapshot,
   type BrokerAdapter,
   type BrokerAuditEvent,
+  type BrokerDataEndpoint,
+  type BrokerDataReadStatus,
   type BrokerOrderRequest,
   type BrokerStatus,
   type NormalizedHistoryEntry,
@@ -63,6 +65,12 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
   private bridgeVersion: string | undefined;
   private lastError: string | undefined;
   private health: BrokerStatus["health"] = "unknown";
+  private readonly dataStatus: BrokerStatus["dataStatus"] = {
+    quotes: { status: "unknown" },
+    account: { status: "unknown" },
+    positions: { status: "unknown" },
+    history: { status: "unknown" },
+  };
   private auditTrail: BrokerAuditEvent[] = [];
   private lastRecordedHeartbeatAt = 0;
 
@@ -251,6 +259,23 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
     await this.recordAudit(event, "system", detail);
   }
 
+  recordDataReadSuccess(endpoint: BrokerDataEndpoint): void {
+    this.dataStatus[endpoint] = {
+      status: "available",
+      lastCheckedAt: this.now().toISOString(),
+    };
+  }
+
+  recordDataReadFailure(
+    endpoint: BrokerDataEndpoint,
+    status: Exclude<BrokerDataReadStatus, "available" | "unknown">,
+  ): void {
+    this.dataStatus[endpoint] = {
+      status,
+      lastCheckedAt: this.now().toISOString(),
+    };
+  }
+
   private async request<T>(path: string): Promise<T> {
     if (this.configurationError) {
       throw new BrokerUnavailableError(this.configurationError);
@@ -318,6 +343,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       lastError: this.lastError,
       auditTrail: [...this.auditTrail],
       database: this.auditStore.getState(),
+      dataStatus: { ...this.dataStatus },
     };
   }
 

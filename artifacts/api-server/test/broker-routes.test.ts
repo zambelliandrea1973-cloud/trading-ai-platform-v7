@@ -14,7 +14,11 @@ import {
   BridgeAuditStore,
   type BridgeAuditRepository,
 } from "../src/lib/broker/audit-store";
-import type { BrokerAuditEvent } from "../src/lib/broker/contract";
+import {
+  BrokerProtocolError,
+  BrokerUnavailableError,
+  type BrokerAuditEvent,
+} from "../src/lib/broker/contract";
 import { Mt5BridgeAdapter } from "../src/lib/broker/mt5-bridge-adapter";
 import { createBrokerRouter } from "../src/routes/broker";
 
@@ -357,6 +361,49 @@ test("broker read routes return the documented 500 shape for unexpected adapter 
     assert.deepEqual(await json(result), {
       error: "Unexpected broker adapter error.",
     });
+  });
+});
+
+test("broker status exposes safe read failure categories without error details", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(repository, bridgeFetch([]));
+  adapter.getQuotes = async () => {
+    throw new BrokerProtocolError("quote payload includes private bridge detail");
+  };
+  adapter.getAccountSnapshot = async () => {
+    throw new BrokerUnavailableError("connection refused at private bridge host");
+  };
+  adapter.getPositions = async () => {
+    throw new Error("adapter stack trace should remain private");
+  };
+
+  await withRouter(adapter, READ_ENV, async (baseUrl) => {
+    const headers = { "x-broker-read-key": "read-secret" };
+    await fetch(`${baseUrl}/api/broker/quotes`, { headers });
+    await fetch(`${baseUrl}/api/broker/account`, { headers });
+    await fetch(`${baseUrl}/api/broker/positions`, { headers });
+    await fetch(`${baseUrl}/api/broker/history`, { headers });
+
+    const response = await fetch(`${baseUrl}/api/broker/status`);
+    assert.equal(response.status, 200);
+    const status = GetBrokerStatusResponse.parse(await json(response));
+
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries(status.dataStatus).map(([endpoint, read]) => [
+          endpoint,
+          read.status,
+        ]),
+      ),
+      {
+        quotes: "malformed",
+        account: "unavailable",
+        positions: "error",
+        history: "available",
+      },
+    );
+    assert.equal(JSON.stringify(status.dataStatus).includes("private"), false);
+    assert.equal(JSON.stringify(status.dataStatus).includes("stack trace"), false);
   });
 });
 

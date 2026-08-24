@@ -9,6 +9,15 @@ export type BrokerCapability =
   | "orders"
   | "history";
 
+export type BrokerDataEndpoint = "quotes" | "account" | "positions" | "history";
+
+export type BrokerDataReadStatus =
+  | "available"
+  | "unavailable"
+  | "malformed"
+  | "error"
+  | "unknown";
+
 export type BrokerConnectionStatus =
   | "paper"
   | "disconnected"
@@ -90,6 +99,11 @@ export interface BrokerDatabaseStatus {
   message: string;
 }
 
+export interface BrokerDataStatus {
+  status: BrokerDataReadStatus;
+  lastCheckedAt?: string;
+}
+
 export interface BrokerStatus {
   provider: BrokerProvider;
   venue: BrokerVenue;
@@ -107,6 +121,7 @@ export interface BrokerStatus {
   lastError?: string;
   auditTrail: BrokerAuditEvent[];
   database: BrokerDatabaseStatus;
+  dataStatus: Record<BrokerDataEndpoint, BrokerDataStatus>;
 }
 
 export class BrokerUnavailableError extends Error {

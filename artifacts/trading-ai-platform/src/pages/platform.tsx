@@ -386,6 +386,23 @@ export function SystemPage() {
    const databaseTone = broker?.database?.status === 'healthy' ? 'positive' : broker?.database?.status === 'degraded' ? 'negative' : 'amber';
    const databaseLabel = broker?.database?.status === 'healthy' ? t('broker.persistenceHealthy') : broker?.database?.status === 'degraded' ? t('broker.persistenceDegraded') : t('broker.persistenceUnknown');
    const databaseMessage = broker?.database?.status === 'healthy' ? t('broker.persistenceHealthyMessage') : broker?.database?.status === 'degraded' ? t('broker.persistenceDegradedMessage') : t('broker.persistenceUnknownMessage');
+  const dataReads: Array<[string, string, { status: string; lastCheckedAt?: string }]> = broker ? [
+    ['quotes', t('broker.readQuotes'), broker.dataStatus.quotes],
+    ['account', t('broker.readAccount'), broker.dataStatus.account],
+    ['positions', t('broker.readPositions'), broker.dataStatus.positions],
+    ['history', t('broker.readHistory'), broker.dataStatus.history],
+  ] : [];
+  const dataReadTone = (status: string) => status === 'available' ? 'positive' : status === 'unknown' ? 'amber' : 'negative';
+  const dataReadLabel = (status: string) => status === 'available'
+    ? t('broker.dataAvailable')
+    : status === 'unavailable'
+      ? t('broker.dataUnavailable')
+      : status === 'malformed'
+        ? t('broker.dataMalformed')
+        : status === 'error'
+          ? t('broker.dataError')
+          : t('broker.dataUnknown');
+  const hasDataReadIssue = dataReads.some(([, , read]) => ['unavailable', 'malformed', 'error'].includes(read.status));
   const heartbeatAgeMs = broker?.lastHeartbeatAt
     ? Math.max(0, Date.now() - Date.parse(broker.lastHeartbeatAt))
     : undefined;
@@ -416,6 +433,7 @@ export function SystemPage() {
     </div>
     {heartbeatState === 'stale' && <Notice tone="negative"><div><p className="font-semibold">{t('broker.heartbeatStaleTitle')}</p><p className="mt-1">{t('broker.heartbeatStaleDetail')} <strong>{formatHeartbeatAge(heartbeatAgeMs)}</strong>. {t('broker.checkVps')}</p></div></Notice>}
     {heartbeatState === 'missing' && <Notice><div><p className="font-semibold">{t('broker.heartbeatMissingTitle')}</p><p className="mt-1">{t('broker.heartbeatMissingDetail')} {t('broker.checkVps')}</p></div></Notice>}
+    {hasDataReadIssue && <div className="mt-3"><Notice tone="negative"><div><p className="font-semibold">{t('broker.dataReadAttentionTitle')}</p><p className="mt-1">{t('broker.dataReadAttentionDetail')}</p></div></Notice></div>}
     <div className="mb-5 panel p-5 md:p-6">
       <SectionLabel aside={<Badge tone={broker?.connected ? 'positive' : 'amber'}>{broker?.mode === 'paper' ? t('broker.paperOnly') : brokerState}</Badge>}>{t('broker.title')}</SectionLabel>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -430,6 +448,16 @@ export function SystemPage() {
          <div><p className="eyebrow">{t('broker.auditPersistence')}</p><Badge tone={databaseTone}>{databaseLabel}</Badge><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{databaseMessage}</p></div>
       </div>
     </div>
+    {broker && <div className="mb-5 panel p-5 md:p-6">
+      <SectionLabel>{t('broker.dataReads')}</SectionLabel>
+      <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{t('broker.dataReadsDetail')}</p>
+      <div className="divide-y divide-border">
+        {dataReads.map(([key, label, read]) => <div className="flex items-center justify-between gap-4 py-3" key={key} data-testid={`broker-read-status-${key}`}>
+          <div><p className="text-sm font-semibold text-foreground">{label}</p><p className="mt-1 mono text-[10px] text-muted-foreground">{read.lastCheckedAt ? formatTimestamp(read.lastCheckedAt) : t('broker.dataUnknown')}</p></div>
+          <Badge tone={dataReadTone(read.status)}>{dataReadLabel(read.status)}</Badge>
+        </div>)}
+      </div>
+    </div>}
     <div className="mb-5 panel p-5 md:p-6">
       <SectionLabel>{t('broker.auditTrail')}</SectionLabel>
       {broker?.auditTrail?.length ? <div className="divide-y divide-border">{broker.auditTrail.slice(-5).reverse().map((event) => <div className="flex items-start justify-between gap-4 py-3" key={`${event.at}-${event.event}`}><div><p className="mono text-xs text-foreground">{event.event}</p><p className="mt-1 text-xs text-muted-foreground">{event.detail ?? event.actor}</p></div><time className="shrink-0 mono text-[10px] text-muted-foreground">{formatTimestamp(event.at)}</time></div>)}</div> : <p className="text-sm text-muted-foreground">{t('broker.noAudit')}</p>}

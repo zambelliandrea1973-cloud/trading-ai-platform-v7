@@ -10,6 +10,7 @@ import {
 import {
   BrokerProtocolError,
   BrokerUnavailableError,
+  type BrokerDataEndpoint,
 } from "../lib/broker/contract";
 import {
   Mt5BridgeAdapter,
@@ -28,7 +29,7 @@ export function createBrokerRouter({
   const router: IRouter = Router();
 
   router.get("/broker/status", async (_req, res): Promise<void> => {
-    await respondWithBrokerData(res, () =>
+    await respondWithBrokerData(res, undefined, undefined, () =>
       adapter.getStatus().then((status) => GetBrokerStatusResponse.parse(status)),
     );
   });
@@ -46,7 +47,7 @@ export function createBrokerRouter({
     const symbols = typeof req.query.symbols === "string"
       ? req.query.symbols.split(",").map((symbol) => symbol.trim()).filter(Boolean)
       : [];
-    await respondWithBrokerData(res, () =>
+    await respondWithBrokerData(res, adapter, "quotes", () =>
       adapter.getQuotes(symbols).then((data) => GetBrokerQuotesResponse.parse(data)),
     );
   });
@@ -61,7 +62,7 @@ export function createBrokerRouter({
         env,
       ))
     ) return;
-    await respondWithBrokerData(res, () =>
+    await respondWithBrokerData(res, adapter, "account", () =>
       adapter.getAccountSnapshot().then((data) => GetBrokerAccountResponse.parse(data)),
     );
   });
@@ -76,7 +77,7 @@ export function createBrokerRouter({
         env,
       ))
     ) return;
-    await respondWithBrokerData(res, () =>
+    await respondWithBrokerData(res, adapter, "positions", () =>
       adapter.getPositions().then((data) => GetBrokerPositionsResponse.parse(data)),
     );
   });
@@ -93,7 +94,7 @@ export function createBrokerRouter({
     ) return;
     const from = typeof req.query.from === "string" ? req.query.from : undefined;
     const to = typeof req.query.to === "string" ? req.query.to : undefined;
-    await respondWithBrokerData(res, () =>
+    await respondWithBrokerData(res, adapter, "history", () =>
       adapter.getHistory(from, to).then((data) => GetBrokerHistoryResponse.parse(data)),
     );
   });
@@ -146,19 +147,26 @@ export function createBrokerRouter({
 
 async function respondWithBrokerData(
   res: Response,
+  adapter: Mt5BridgeAdapter | undefined,
+  endpoint: BrokerDataEndpoint | undefined,
   operation: () => Promise<unknown>,
 ): Promise<void> {
   try {
-    res.json(await operation());
+    const data = await operation();
+    if (adapter && endpoint) adapter.recordDataReadSuccess(endpoint);
+    res.json(data);
   } catch (error) {
     if (error instanceof BrokerProtocolError) {
+      if (adapter && endpoint) adapter.recordDataReadFailure(endpoint, "malformed");
       res.status(502).json({ error: error.message });
       return;
     }
     if (error instanceof BrokerUnavailableError) {
+      if (adapter && endpoint) adapter.recordDataReadFailure(endpoint, "unavailable");
       res.status(503).json({ error: error.message });
       return;
     }
+    if (adapter && endpoint) adapter.recordDataReadFailure(endpoint, "error");
     res.status(500).json({ error: "Unexpected broker adapter error." });
   }
 }
