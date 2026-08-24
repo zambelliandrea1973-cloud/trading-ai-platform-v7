@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: trading
     description: Paper trading dashboard data
+  - name: broker
+    description: Broker and MT5 bridge readiness
 paths:
   /healthz:
     get:
@@ -90,6 +92,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /broker/status:
+    get:
+      operationId: getBrokerStatus
+      tags: [broker]
+      summary: Get Axi MT5 bridge readiness
+      responses:
+        "200":
+          description: Broker connection and execution status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrokerStatus"
 components:
   schemas:
     HealthStatus:
@@ -176,4 +190,19 @@ components:
         regime: { type: string }
         warningLevel: { type: string }
       required: [marketState, marketStateDetail, riskScore, riskLabel, riskUpdatedAt, paperCapital, equity, dailyPnl, openPositions, exposure, drawdown, opportunities, regime, warningLevel]
+    BrokerStatus:
+      type: object
+      properties:
+        provider: { type: string }
+        venue: { type: string }
+        mode: { type: string }
+        status: { type: string }
+        connected: { type: boolean }
+        executionEnabled: { type: boolean }
+        bridgeRequired: { type: boolean }
+        capabilities:
+          type: array
+          items: { type: string }
+        message: { type: string }
+      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message]
 

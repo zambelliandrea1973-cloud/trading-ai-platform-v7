@@ -9,6 +9,7 @@
 export * from './assetAnalysis';
 export * from './assetAnalysisIndicators';
 export * from './brainScore';
+export * from './brokerStatus';
 export * from './dashboard';
 export * from './error';
 export * from './healthStatus';

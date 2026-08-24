@@ -75,3 +75,15 @@ export interface Dashboard {
   warningLevel: string;
 }
 
+export interface BrokerStatus {
+  provider: string;
+  venue: string;
+  mode: string;
+  status: string;
+  connected: boolean;
+  executionEnabled: boolean;
+  bridgeRequired: boolean;
+  capabilities: string[];
+  message: string;
+}
+

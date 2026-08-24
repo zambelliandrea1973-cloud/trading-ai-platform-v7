@@ -17,6 +17,7 @@ import type {
 
 import type {
   AssetAnalysis,
+  BrokerStatus,
   Dashboard,
   Error,
   HealthStatus,
@@ -425,6 +426,83 @@ export function useGetAssetAnalysis<TData = Awaited<ReturnType<typeof getAssetAn
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAssetAnalysisQueryOptions(symbol,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBrokerStatusUrl = () => {
+
+
+
+
+  return `/api/broker/status`
+}
+
+/**
+ * @summary Get Axi MT5 bridge readiness
+ */
+export const getBrokerStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<BrokerStatus> => {
+
+  return customFetch<BrokerStatus>(getGetBrokerStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrokerStatusQueryKey = () => {
+    return [
+    `/api/broker/status`
+    ] as const;
+    }
+
+
+export const getGetBrokerStatusQueryOptions = <TData = Awaited<ReturnType<typeof getBrokerStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrokerStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrokerStatus>>> = ({ signal }) => getBrokerStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrokerStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrokerStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getBrokerStatus>>>
+export type GetBrokerStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get Axi MT5 bridge readiness
+ */
+
+export function useGetBrokerStatus<TData = Awaited<ReturnType<typeof getBrokerStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrokerStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrokerStatusQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

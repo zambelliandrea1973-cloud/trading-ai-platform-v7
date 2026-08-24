@@ -114,3 +114,19 @@ export const GetAssetAnalysisResponse = zod.object({
 })
 
 
+/**
+ * @summary Get Axi MT5 bridge readiness
+ */
+export const GetBrokerStatusResponse = zod.object({
+  "provider": zod.string(),
+  "venue": zod.string(),
+  "mode": zod.string(),
+  "status": zod.string(),
+  "connected": zod.boolean(),
+  "executionEnabled": zod.boolean(),
+  "bridgeRequired": zod.boolean(),
+  "capabilities": zod.array(zod.string()),
+  "message": zod.string()
+})
+
+

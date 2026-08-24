@@ -244,6 +244,12 @@ const messages = {
     'system.unavailable': 'Non disponibile',
     'system.healthEndpoint': 'Endpoint di salute',
     'system.checking': 'Controllo in corso…',
+    'broker.title': 'Bridge Axi / MetaTrader 5',
+    'broker.ready': 'Pronto per la configurazione',
+    'broker.disconnected': 'Bridge non collegato',
+    'broker.paperOnly': 'Solo PAPER',
+    'broker.executionDisabled': 'Esecuzione LIVE disabilitata',
+    'broker.bridgeRequired': 'Richiede un bridge MT5 separato su Windows/VPS.',
 
     // Settings
     'settings.eyebrow': 'Controlla / area di lavoro',
@@ -515,6 +521,12 @@ const messages = {
     'system.unavailable': 'Unavailable',
     'system.healthEndpoint': 'Health endpoint',
     'system.checking': 'Checking…',
+    'broker.title': 'Axi / MetaTrader 5 bridge',
+    'broker.ready': 'Ready for configuration',
+    'broker.disconnected': 'Bridge disconnected',
+    'broker.paperOnly': 'PAPER only',
+    'broker.executionDisabled': 'LIVE execution disabled',
+    'broker.bridgeRequired': 'Requires a separate MT5 bridge on Windows/VPS.',
 
     // Settings
     'settings.eyebrow': 'Control / workspace',
