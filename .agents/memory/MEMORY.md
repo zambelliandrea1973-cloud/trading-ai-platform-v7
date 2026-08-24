@@ -1,0 +1,1 @@
+- [Localization approach](localization-approach.md) — Italian and English are first-class UI locales, managed through one central dictionary and persisted user choice.

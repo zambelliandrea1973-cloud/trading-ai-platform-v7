@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: trading
+    description: Paper trading dashboard data
 paths:
   /healthz:
     get:
@@ -24,6 +26,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [trading]
+      summary: Get paper trading dashboard overview
+      responses:
+        "200":
+          description: Dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /markets:
+    get:
+      operationId: getMarkets
+      tags: [trading]
+      summary: List tracked markets
+      responses:
+        "200":
+          description: Market snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Market"
+  /opportunities:
+    get:
+      operationId: getOpportunities
+      tags: [trading]
+      summary: List ranked paper opportunities
+      responses:
+        "200":
+          description: Ranked opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Opportunity"
+  /assets/{symbol}:
+    get:
+      operationId: getAssetAnalysis
+      tags: [trading]
+      summary: Get explainable asset analysis
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetAnalysis"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +99,81 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Market:
+      type: object
+      properties:
+        symbol: { type: string }
+        name: { type: string }
+        assetClass: { type: string }
+        price: { type: number }
+        change: { type: number }
+        changePercent: { type: number }
+        sparkline:
+          type: array
+          items: { type: number }
+        status: { type: string }
+      required: [symbol, name, assetClass, price, change, changePercent, sparkline, status]
+    Opportunity:
+      type: object
+      properties:
+        symbol: { type: string }
+        signal: { type: string }
+        confidence: { type: number }
+        risk: { type: string }
+        state: { type: string }
+        rationale: { type: string }
+      required: [symbol, signal, confidence, risk, state, rationale]
+    BrainScore:
+      type: object
+      properties:
+        direction: { type: string }
+        score: { type: number }
+        confidence: { type: number }
+        rationale: { type: string }
+      required: [direction, score, confidence, rationale]
+    AssetAnalysis:
+      type: object
+      properties:
+        symbol: { type: string }
+        name: { type: string }
+        price: { type: number }
+        decision: { type: string }
+        confidence: { type: number }
+        riskLevel: { type: string }
+        regime: { type: string }
+        explanation: { type: string }
+        technical: { $ref: "#/components/schemas/BrainScore" }
+        fundamental: { $ref: "#/components/schemas/BrainScore" }
+        risk: { $ref: "#/components/schemas/BrainScore" }
+        indicators:
+          type: object
+          additionalProperties: { type: number }
+        invalidation: { type: string }
+      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation]
+    Dashboard:
+      type: object
+      properties:
+        marketState: { type: string }
+        marketStateDetail: { type: string }
+        riskScore: { type: number }
+        riskLabel: { type: string }
+        riskUpdatedAt: { type: string }
+        paperCapital: { type: number }
+        equity: { type: number }
+        dailyPnl: { type: number }
+        openPositions: { type: number }
+        exposure: { type: number }
+        drawdown: { type: number }
+        opportunities:
+          type: array
+          items: { $ref: "#/components/schemas/Opportunity" }
+        regime: { type: string }
+        warningLevel: { type: string }
+      required: [marketState, marketStateDetail, riskScore, riskLabel, riskUpdatedAt, paperCapital, equity, dailyPnl, openPositions, exposure, drawdown, opportunities, regime, warningLevel]
 

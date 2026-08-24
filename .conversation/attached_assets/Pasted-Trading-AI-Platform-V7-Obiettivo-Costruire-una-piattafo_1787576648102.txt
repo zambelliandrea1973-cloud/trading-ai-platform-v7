@@ -1,0 +1,868 @@
+Trading AI Platform — V7
+
+Obiettivo
+
+Costruire una piattaforma AI multi-asset per analisi, valutazione, simulazione e futura esecuzione di operazioni su MetaTrader 5.
+
+La piattaforma deve:
+
+- analizzare più mercati contemporaneamente;
+- integrare analisi tecnica, macroeconomica, news e geopolitica;
+- valutare correlazioni e flussi cross-asset;
+- produrre segnali BUY / SELL / NO TRADE;
+- dare priorità assoluta alla gestione del rischio;
+- essere comprensibile anche a un utente inesperto;
+- mantenere PAPER TRADING come modalità iniziale e predefinita;
+- predisporre una futura integrazione con Axi / MT5 senza dipendere da Replit.
+
+---
+
+1. Architettura generale
+
+Separare chiaramente:
+
+Frontend
+
+Dashboard React/Vite.
+
+Backend
+
+Node.js + TypeScript + Express.
+
+Database
+
+PostgreSQL + Drizzle ORM.
+
+Deployment
+
+Docker compatibile con Sliplane.
+
+Repository
+
+Repository GitHub dedicato esclusivamente al progetto trading.
+
+MT5
+
+Bridge esterno separato eseguito su Windows/VPS.
+
+---
+
+2. Market Data Engine
+
+Gestire:
+
+- Forex
+- indici
+- commodities
+- crypto
+- asset MT5 compatibili
+
+Supportare:
+
+- OHLC
+- tick
+- volume quando disponibile
+- spread
+- volatilità
+- timeframe multipli
+
+Timeframe iniziali:
+
+- M5
+- M15
+- H1
+- H4
+- D1
+
+---
+
+3. Technical Brain
+
+Analizzare:
+
+- trend
+- momentum
+- market structure
+- RSI
+- MACD
+- ATR
+- moving averages
+- supporti
+- resistenze
+- breakout
+- mean reversion
+- volatilità
+- volume
+- multi-timeframe confirmation
+
+Output:
+
+- STRONG BUY
+- BUY
+- NEUTRAL
+- SELL
+- STRONG SELL
+
+Ogni output deve includere:
+
+- score numerico
+- confidence
+- fattori positivi
+- fattori negativi
+- condizioni di invalidazione
+
+---
+
+4. Fundamental / News Brain
+
+Analizzare:
+
+- news finanziarie
+- macroeconomia
+- banche centrali
+- inflazione
+- tassi
+- occupazione
+- PIL
+- energia
+- geopolitica
+- guerre
+- sanzioni
+- elezioni
+- crisi finanziarie
+- eventi sistemici
+
+Ogni evento deve avere:
+
+- timestamp
+- fonte
+- categoria
+- asset coinvolti
+- sentiment
+- intensità
+- confidence
+- durata prevista
+- impatto potenziale
+
+---
+
+5. Temporal Priority Engine
+
+Attribuire maggiore importanza agli eventi recenti.
+
+Classificare ogni evento come:
+
+- Immediate Shock
+- Short-Term Catalyst
+- Medium-Term Driver
+- Structural Event
+
+Applicare decadimento temporale dinamico.
+
+Un evento strutturale può mantenere peso elevato più a lungo.
+
+---
+
+6. Asset Exposure / Knowledge Graph
+
+Creare relazioni tra:
+
+- paesi
+- valute
+- commodities
+- aziende
+- settori
+- indici
+- banche centrali
+- tassi
+- inflazione
+- energia
+- bond
+- asset rifugio
+
+Esempio:
+
+Geopolitical escalation
+→ Oil supply risk
+→ Oil
+→ Inflation expectations
+→ Interest rates
+→ USD
+→ Equity indices
+
+Il sistema deve poter spiegare queste catene.
+
+---
+
+7. Market Regime Brain
+
+Identificare il regime corrente.
+
+Possibili stati:
+
+- TRENDING
+- RANGING
+- HIGH VOLATILITY
+- LOW VOLATILITY
+- RISK ON
+- RISK OFF
+- EXTREME RISK OFF
+- UNSTABLE
+
+---
+
+8. Three-Brain Architecture
+
+Tre cervelli indipendenti:
+
+Technical Brain
+
+Valuta prezzo e struttura tecnica.
+
+Fundamental Brain
+
+Valuta news, macro e geopolitica.
+
+Risk / Regime Brain
+
+Valuta volatilità, rischio, correlazioni e condizioni generali.
+
+Ogni cervello restituisce:
+
+- direzione
+- score
+- confidence
+- motivazioni
+- warning
+
+---
+
+9. Master Decision Engine
+
+Combina i tre cervelli.
+
+Output finale:
+
+- BUY
+- SELL
+- WAIT
+- NO TRADE
+
+Mostrare:
+
+- confidence globale
+- accordo tra cervelli
+- conflitti
+- principali motivazioni
+- rischio
+- condizioni di invalidazione
+
+NO TRADE deve essere considerato un risultato valido.
+
+---
+
+10. Master Risk Engine
+
+Il Risk Engine ha autorità superiore a qualsiasi segnale.
+
+Deve poter bloccare qualsiasi operazione.
+
+Gestire:
+
+- rischio massimo per trade
+- rischio massimo giornaliero
+- rischio massimo portafoglio
+- drawdown
+- correlazioni
+- esposizione per asset
+- esposizione per asset class
+- stop loss
+- take profit
+- position sizing
+- volatilità
+- spread
+- slippage
+- eventi macro
+- anomalie di mercato
+
+Output:
+
+- APPROVED
+- REDUCED SIZE
+- WAIT
+- BLOCKED
+
+---
+
+11. Historical Analogy Engine
+
+Confrontare condizioni attuali con periodi storici simili.
+
+Considerare:
+
+- trend
+- volatilità
+- macro
+- correlazioni
+- news
+- sentiment
+- regime
+
+Restituire:
+
+- scenari storici più simili
+- grado di similarità
+- evoluzione successiva
+
+Non presentare mai la similitudine storica come previsione certa.
+
+---
+
+12. Safe-Haven / Flow Engine
+
+Analizzare movimenti tra:
+
+- azioni
+- bond
+- USD
+- CHF
+- JPY
+- oro
+- petrolio
+- crypto
+
+Classificazione:
+
+- RISK ON
+- NEUTRAL
+- RISK OFF
+- EXTREME RISK OFF
+
+---
+
+13. Crash Early Warning Engine
+
+Analizzare contemporaneamente:
+
+- volatilità
+- correlazioni
+- market structure
+- safe haven
+- news intensity
+- macro surprises
+- spread
+- anomalie cross-asset
+
+Output:
+
+- NORMAL
+- ELEVATED
+- HIGH
+- CRITICAL
+
+Non prevedere date precise di crash.
+
+---
+
+14. Dashboard V7
+
+La dashboard deve essere pensata prima per chiarezza e poi per completezza.
+
+Home Dashboard
+
+Mostrare subito:
+
+Stato mercato
+
+Esempio:
+
+MERCATO: INCERTO
+
+oppure:
+
+MERCATO: FAVOREVOLE
+
+oppure:
+
+MERCATO: RISCHIOSO
+
+---
+
+Market Risk Meter
+
+Indicatore da 0 a 100.
+
+0–25:
+Low Risk
+
+26–50:
+Moderate Risk
+
+51–75:
+High Risk
+
+76–100:
+Extreme Risk
+
+---
+
+Top Opportunities
+
+Tabella:
+
+Asset| Segnale| Confidence| Rischio| Stato
+EUR/USD| BUY| 78%| Medio| Valutabile
+Gold| WAIT| 62%| Alto| Attendere
+NASDAQ| NO TRADE| 41%| Alto| Bloccato
+
+---
+
+15. Asset Analysis Page
+
+Quando si seleziona un asset mostrare:
+
+Asset
+
+EUR/USD
+
+Prezzo
+
+Prezzo corrente.
+
+Decisione AI
+
+BUY / SELL / WAIT / NO TRADE
+
+Confidence
+
+Esempio:
+
+78%
+
+Technical Brain
+
+BUY — 82%
+
+Fundamental Brain
+
+NEUTRAL — 61%
+
+Risk Brain
+
+CAUTION — 67%
+
+Market Regime
+
+TRENDING
+
+Risk Level
+
+MEDIUM
+
+---
+
+16. Spiegazione semplice
+
+Ogni decisione deve essere accompagnata da una frase comprensibile.
+
+Esempio:
+
+“Il trend è positivo e gli indicatori tecnici sono favorevoli. Tuttavia la volatilità è superiore alla media, quindi il sistema propone una posizione ridotta.”
+
+Evitare spiegazioni esclusivamente tecniche.
+
+---
+
+17. Modalità Beginner / Advanced
+
+Beginner Mode
+
+Mostrare soltanto:
+
+- BUY / SELL / WAIT
+- confidence
+- livello rischio
+- capitale suggerito
+- stop loss
+- take profit
+- perdita massima stimata
+- motivazione semplice
+
+Advanced Mode
+
+Mostrare anche:
+
+- indicatori
+- score
+- ATR
+- RSI
+- MACD
+- correlazioni
+- volatility regime
+- news scores
+- brain weights
+- dettagli Risk Engine
+
+---
+
+18. Parametri modificabili dal neofita
+
+Permettere solo pochi parametri.
+
+Profilo rischio
+
+- Prudente
+- Bilanciato
+- Dinamico
+
+Capitale disponibile
+
+Valore numerico.
+
+Perdita massima accettabile
+
+Espressa in euro o percentuale.
+
+Durata operazione preferita
+
+- breve
+- media
+- lunga
+
+Asset preferiti
+
+Selezione semplice.
+
+---
+
+19. Parametri protetti
+
+NON rendere facilmente modificabili:
+
+- leverage
+- algoritmi di position sizing
+- pesi interni AI
+- soglie crash detection
+- risk-engine limits
+- correlation thresholds
+- slippage model
+- execution safeguards
+
+Questi devono essere disponibili solo in Advanced / Admin mode.
+
+---
+
+20. Trade Proposal Screen
+
+Prima di ogni operazione mostrare:
+
+ASSET
+EUR/USD
+
+AZIONE
+BUY
+
+CONFIDENCE
+78%
+
+RISCHIO
+MEDIO
+
+CAPITALE ESPOSTO
+€500
+
+PERDITA MASSIMA STIMATA
+€12
+
+STOP LOSS
+1.0845
+
+TAKE PROFIT
+1.0930
+
+RAPPORTO RISCHIO/RENDIMENTO
+1 : 2.1
+
+---
+
+21. Conferma anti-errore
+
+Per PAPER:
+
+“Conferma simulazione”
+
+Per futuro LIVE:
+
+non usare mai un singolo pulsante BUY / SELL immediato.
+
+Richiedere:
+
+1. proposta AI
+2. controllo Risk Engine
+3. schermata riepilogo
+4. conferma utente
+5. invio ordine
+
+---
+
+22. Colori funzionali
+
+Usare colori coerenti:
+
+Verde:
+condizione favorevole
+
+Rosso:
+rischio / blocco
+
+Giallo:
+attenzione
+
+Blu:
+informazione
+
+Grigio:
+neutralità
+
+Non usare soltanto il colore.
+
+Aggiungere sempre testo o icone.
+
+---
+
+23. Barra superiore
+
+Mostrare sempre:
+
+- PAPER / LIVE
+- connessione mercato
+- connessione MT5
+- stato AI
+- stato Risk Engine
+- timestamp ultimo aggiornamento
+
+PAPER deve essere molto evidente.
+
+---
+
+24. Navigation
+
+Menu:
+
+Dashboard
+
+Markets
+
+Asset Analysis
+
+Opportunities
+
+Portfolio
+
+Trade Simulator
+
+News & Macro
+
+Risk
+
+Backtest
+
+Trade History
+
+System Status
+
+Settings
+
+---
+
+25. Portfolio Dashboard
+
+Mostrare:
+
+- capitale
+- equity
+- P&L
+- esposizione
+- rischio totale
+- posizioni aperte
+- correlazione
+- drawdown
+
+---
+
+26. Backtesting
+
+Supportare:
+
+- historical backtest
+- walk-forward
+- paper simulation
+
+Metriche:
+
+- net profit
+- win rate
+- loss rate
+- profit factor
+- expectancy
+- max drawdown
+- Sharpe ratio
+- number of trades
+
+Evitare:
+
+- look-ahead bias
+- data leakage
+
+---
+
+27. Explainability
+
+Ogni trade deve memorizzare:
+
+- perché è stato proposto
+- quali cervelli erano favorevoli
+- quali erano contrari
+- livello rischio
+- informazioni usate
+- timestamp
+- parametri
+- esito Risk Engine
+
+---
+
+28. Audit trail
+
+Ogni modifica utente deve essere registrata.
+
+Registrare:
+
+- timestamp
+- parametro
+- valore precedente
+- nuovo valore
+- utente
+- modalità PAPER / LIVE
+
+---
+
+29. Safety Defaults
+
+Default:
+
+TRADING_MODE=PAPER
+
+LIVE_TRADING=false
+
+MT5_EXECUTION=false
+
+AUTOMATIC_EXECUTION=false
+
+---
+
+30. Regola fondamentale
+
+La piattaforma non deve cercare il maggior numero possibile di operazioni.
+
+Deve cercare soltanto operazioni con rapporto rischio/opportunità coerente.
+
+La capacità di NON entrare nel mercato è parte essenziale del sistema.
+
+---
+
+31. Ordine di sviluppo
+
+Fase 1
+
+Ossatura frontend + dashboard.
+
+Fase 2
+
+Database.
+
+Fase 3
+
+Market Data.
+
+Fase 4
+
+Technical Brain.
+
+Fase 5
+
+Fundamental Brain.
+
+Fase 6
+
+Risk / Regime Brain.
+
+Fase 7
+
+Master Decision Engine.
+
+Fase 8
+
+Master Risk Engine.
+
+Fase 9
+
+Historical Analogy.
+
+Fase 10
+
+Safe Haven.
+
+Fase 11
+
+Crash Warning.
+
+Fase 12
+
+Backtest.
+
+Fase 13
+
+Paper Trading.
+
+Fase 14
+
+MT5 Bridge.
+
+Fase 15
+
+Solo dopo validazione completa:
+valutare LIVE trading.
+
+---
+
+32. Regola per Replit
+
+Prima di programmare:
+
+1. analizzare tutta questa specifica;
+2. proporre struttura file;
+3. creare database schema;
+4. creare dashboard skeleton;
+5. NON implementare LIVE trading;
+6. NON inserire API key nel codice;
+7. NON creare funzioni finte;
+8. NON mostrare pulsanti funzionanti se il backend non esiste;
+9. indicare chiaramente ciò che è MOCK;
+10. mantenere architettura compatibile con GitHub + Docker + Sliplane.
+
+---
+
+33. Obiettivo V7
+
+La V7 deve produrre una piattaforma già navigabile e comprensibile, anche prima che tutti i motori AI siano completi.
+
+La dashboard deve diventare il centro operativo dell'applicazione.
+
+Priorità:
+
+1. sicurezza
+2. comprensibilità
+3. robustezza
+4. spiegabilità
+5. risk management
+6. performance

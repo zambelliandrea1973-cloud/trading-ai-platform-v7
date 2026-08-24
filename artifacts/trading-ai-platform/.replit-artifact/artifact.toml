@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Trading AI Platform V7"
+description = "Una piattaforma multi-asset per analisi di mercato, decisioni AI spiegabili e simulazione paper trading con gestione del rischio come autorità principale."
+version = "1.0.0"
+id = "artifacts/trading-ai-platform"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25364
+
+[services.development]
+run = "pnpm --filter @workspace/trading-ai-platform run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trading-ai-platform", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trading-ai-platform/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25364"
+BASE_PATH = "/"
