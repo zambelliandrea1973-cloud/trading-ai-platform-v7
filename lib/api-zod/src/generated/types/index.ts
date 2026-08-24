@@ -14,6 +14,8 @@ export * from './bridgeProtocolFailureResponse';
 export * from './bridgeUnavailableResponse';
 export * from './brokerAuditEvent';
 export * from './brokerAuditEventActor';
+export * from './brokerDatabaseStatus';
+export * from './brokerDatabaseStatusStatus';
 export * from './brokerReadForbiddenResponse';
 export * from './brokerReadUnauthorizedResponse';
 export * from './brokerStatus';

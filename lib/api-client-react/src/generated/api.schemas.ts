@@ -99,6 +99,20 @@ export interface BrokerAuditEvent {
   detail?: string;
 }
 
+export type BrokerDatabaseStatusStatus = typeof BrokerDatabaseStatusStatus[keyof typeof BrokerDatabaseStatusStatus];
+
+
+export const BrokerDatabaseStatusStatus = {
+  healthy: 'healthy',
+  degraded: 'degraded',
+  unknown: 'unknown',
+} as const;
+
+export interface BrokerDatabaseStatus {
+  status: BrokerDatabaseStatusStatus;
+  message: string;
+}
+
 export interface BrokerStatus {
   provider: string;
   venue: string;
@@ -115,6 +129,7 @@ export interface BrokerStatus {
   bridgeVersion?: string;
   lastError?: string;
   auditTrail: BrokerAuditEvent[];
+  database: BrokerDatabaseStatus;
 }
 
 export interface NormalizedQuote {

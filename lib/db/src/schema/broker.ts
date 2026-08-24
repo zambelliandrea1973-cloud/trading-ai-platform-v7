@@ -1,4 +1,6 @@
 import { pgTable, serial, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 
 export const brokerConnectionsTable = pgTable("broker_connections", {
   id: serial("id").primaryKey(),
@@ -24,6 +26,13 @@ export const auditEventsTable = pgTable("audit_events", {
   nextValue: jsonb("next_value"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const insertAuditEventSchema = createInsertSchema(auditEventsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAuditEvent = z.infer<typeof insertAuditEventSchema>;
+export type AuditEvent = typeof auditEventsTable.$inferSelect;
 
 export const paperProposalsTable = pgTable("paper_proposals", {
   id: serial("id").primaryKey(),

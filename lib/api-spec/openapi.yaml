@@ -341,7 +341,9 @@ components:
         auditTrail:
           type: array
           items: { $ref: "#/components/schemas/BrokerAuditEvent" }
-      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message, health, auditTrail]
+        database:
+          $ref: "#/components/schemas/BrokerDatabaseStatus"
+      required: [provider, venue, mode, status, connected, executionEnabled, bridgeRequired, capabilities, message, health, auditTrail, database]
     BrokerAuditEvent:
       type: object
       properties:
@@ -350,6 +352,12 @@ components:
         actor: { type: string, enum: [system, bridge] }
         detail: { type: string }
       required: [event, at, actor]
+    BrokerDatabaseStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [healthy, degraded, unknown] }
+        message: { type: string }
+      required: [status, message]
     NormalizedQuote:
       type: object
       properties:

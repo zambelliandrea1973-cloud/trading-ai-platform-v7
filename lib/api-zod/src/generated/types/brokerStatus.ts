@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BrokerAuditEvent } from './brokerAuditEvent';
+import type { BrokerDatabaseStatus } from './brokerDatabaseStatus';
 import type { BrokerStatusHealth } from './brokerStatusHealth';
 
 export interface BrokerStatus {
@@ -24,4 +25,5 @@ export interface BrokerStatus {
   bridgeVersion?: string;
   lastError?: string;
   auditTrail: BrokerAuditEvent[];
+  database: BrokerDatabaseStatus;
 }

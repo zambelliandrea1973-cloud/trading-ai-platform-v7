@@ -257,6 +257,13 @@ const messages = {
     'broker.auditTrail': 'Audit recente',
     'broker.noAudit': 'Nessun evento bridge registrato',
     'broker.version': 'Versione bridge',
+     'broker.auditPersistence': 'Persistenza audit',
+     'broker.persistenceHealthy': 'PostgreSQL attivo',
+     'broker.persistenceDegraded': 'PostgreSQL degradato',
+     'broker.persistenceUnknown': 'Stato sconosciuto',
+     'broker.persistenceHealthyMessage': 'Gli eventi del bridge sono salvati in PostgreSQL.',
+     'broker.persistenceDegradedMessage': 'Il salvataggio PostgreSQL non è disponibile. L’esecuzione LIVE resta disabilitata.',
+     'broker.persistenceUnknownMessage': 'Lo stato del salvataggio audit non è ancora disponibile.',
 
     // Settings
     'settings.eyebrow': 'Controlla / area di lavoro',
@@ -541,6 +548,13 @@ const messages = {
     'broker.auditTrail': 'Recent audit',
     'broker.noAudit': 'No bridge events recorded',
     'broker.version': 'Bridge version',
+     'broker.auditPersistence': 'Audit persistence',
+     'broker.persistenceHealthy': 'PostgreSQL healthy',
+     'broker.persistenceDegraded': 'PostgreSQL degraded',
+     'broker.persistenceUnknown': 'Unknown state',
+     'broker.persistenceHealthyMessage': 'Bridge events are saved in PostgreSQL.',
+     'broker.persistenceDegradedMessage': 'PostgreSQL persistence is unavailable. LIVE execution remains disabled.',
+     'broker.persistenceUnknownMessage': 'Audit persistence status is not available yet.',
 
     // Settings
     'settings.eyebrow': 'Control / workspace',

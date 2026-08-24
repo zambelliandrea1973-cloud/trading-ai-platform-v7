@@ -137,7 +137,11 @@ export const GetBrokerStatusResponse = zod.object({
   "at": zod.coerce.date(),
   "actor": zod.enum(['system', 'bridge']),
   "detail": zod.string().optional()
-}))
+})),
+  "database": zod.object({
+  "status": zod.enum(['healthy', 'degraded', 'unknown']),
+  "message": zod.string()
+})
 })
 
 

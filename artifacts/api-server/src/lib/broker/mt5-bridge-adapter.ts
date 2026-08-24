@@ -10,6 +10,7 @@ import {
   type NormalizedPosition,
   type NormalizedQuote,
 } from "./contract";
+import { bridgeAuditStore } from "./audit-store";
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_HEARTBEAT_TTL_MS = 30_000;
@@ -119,6 +120,8 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
   }
 
   async getStatus(): Promise<BrokerStatus> {
+    const persistedAuditTrail = await bridgeAuditStore.list();
+    this.auditTrail = persistedAuditTrail;
     if (this.configurationError) {
       return this.status("blocked", this.configurationError);
     }
@@ -140,7 +143,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       this.bridgeVersion = health.bridgeVersion;
       this.lastError = undefined;
       this.health = health.status;
-      this.recordAudit(
+      await this.recordAudit(
         "heartbeat.received",
         "bridge",
         "Bridge health check",
@@ -148,7 +151,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       if (!this.isHeartbeatFresh()) {
         this.health = "degraded";
         this.lastError = "Bridge heartbeat is stale.";
-        this.recordAudit("heartbeat.stale", "system", this.lastError);
+        await this.recordAudit("heartbeat.stale", "system", this.lastError);
         return this.status(
           "disconnected",
           "Axi/MT5 bridge heartbeat is stale. Paper mode remains active.",
@@ -165,7 +168,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       this.lastHealthCheckAt = this.now().toISOString();
       this.lastError = message;
       this.health = "degraded";
-      this.recordAudit("health.check_failed", "system", message);
+      await this.recordAudit("health.check_failed", "system", message);
       return this.status(
         error instanceof BrokerProtocolError ? "blocked" : "disconnected",
         `Axi/MT5 bridge health check failed. Paper mode remains active. ${message}`,
@@ -220,7 +223,11 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       readOptionalString(payload.bridgeVersion) ?? this.bridgeVersion;
     this.health = normalizeHealthStatus(payload.status, "heartbeat.status");
     this.lastError = undefined;
-    this.recordAudit("heartbeat.received", "bridge", "Authenticated bridge heartbeat");
+    await this.recordAudit(
+      "heartbeat.received",
+      "bridge",
+      "Authenticated bridge heartbeat",
+    );
   }
 
   isConfigured(): boolean {
@@ -237,8 +244,8 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
     return this.config?.apiKey;
   }
 
-  recordSecurityEvent(event: string, detail: string): void {
-    this.recordAudit(event, "system", detail);
+  async recordSecurityEvent(event: string, detail: string): Promise<void> {
+    await this.recordAudit(event, "system", detail);
   }
 
   private async request<T>(path: string): Promise<T> {
@@ -307,14 +314,15 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       bridgeVersion: this.bridgeVersion,
       lastError: this.lastError,
       auditTrail: [...this.auditTrail],
+      database: bridgeAuditStore.getState(),
     };
   }
 
-  private recordAudit(
+  private async recordAudit(
     event: string,
     actor: BrokerAuditEvent["actor"],
     detail?: string,
-  ): void {
+  ): Promise<void> {
     const now = this.now();
     if (
       event === "heartbeat.received" &&
@@ -323,10 +331,17 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       return;
     }
     this.lastRecordedHeartbeatAt = now.getTime();
+    const auditEvent: BrokerAuditEvent = {
+      event,
+      actor,
+      detail,
+      at: now.toISOString(),
+    };
     this.auditTrail = [
       ...this.auditTrail,
-      { event, actor, detail, at: now.toISOString() },
+      auditEvent,
     ].slice(-MAX_AUDIT_EVENTS);
+    await bridgeAuditStore.append(auditEvent);
   }
 }
 

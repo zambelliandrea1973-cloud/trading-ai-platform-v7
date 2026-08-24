@@ -153,6 +153,9 @@ export function SystemPage() {
   ];
   const brokerState = broker?.connected ? t('broker.ready') : t('broker.disconnected');
   const healthTone = broker?.health === 'healthy' ? 'positive' : broker?.health === 'degraded' ? 'negative' : 'amber';
+   const databaseTone = broker?.database?.status === 'healthy' ? 'positive' : broker?.database?.status === 'degraded' ? 'negative' : 'amber';
+   const databaseLabel = broker?.database?.status === 'healthy' ? t('broker.persistenceHealthy') : broker?.database?.status === 'degraded' ? t('broker.persistenceDegraded') : t('broker.persistenceUnknown');
+   const databaseMessage = broker?.database?.status === 'healthy' ? t('broker.persistenceHealthyMessage') : broker?.database?.status === 'degraded' ? t('broker.persistenceDegradedMessage') : t('broker.persistenceUnknownMessage');
   const formatTimestamp = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value)) : t('broker.noHeartbeat');
   return <div className="content-wrap">
     <PageHeader eyebrow={t('system.eyebrow')} title={t('system.title')} subtitle={t('system.subtitle')} action={<button onClick={() => { query.refetch(); brokerQuery.refetch(); }} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-primary" data-testid="button-refresh-system"><RefreshCw size={14} />{t('system.runChecks')}</button>} />
@@ -167,10 +170,11 @@ export function SystemPage() {
         <div><p className="text-sm font-semibold text-foreground">{brokerState}</p><p className="mt-1 text-xs text-muted-foreground">{broker?.message ?? t('broker.bridgeRequired')}</p></div>
         <div className="flex flex-wrap gap-2"><Badge tone="neutral">{broker?.provider?.toUpperCase() ?? 'AXI'}</Badge><Badge tone="neutral">{broker?.venue?.toUpperCase() ?? 'MT5'}</Badge><Badge tone="negative">{t('broker.executionDisabled')}</Badge></div>
       </div>
-      <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
+       <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-4">
         <div><p className="eyebrow">{t('broker.health')}</p><Badge tone={healthTone}>{broker?.health ?? 'unknown'}</Badge></div>
         <div><p className="eyebrow">{t('broker.lastHeartbeat')}</p><p className="mt-1 mono text-xs text-foreground">{formatTimestamp(broker?.lastHeartbeatAt)}</p></div>
         <div><p className="eyebrow">{t('broker.version')}</p><p className="mt-1 mono text-xs text-foreground">{broker?.bridgeVersion ?? '—'}</p></div>
+         <div><p className="eyebrow">{t('broker.auditPersistence')}</p><Badge tone={databaseTone}>{databaseLabel}</Badge><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{databaseMessage}</p></div>
       </div>
     </div>
     <div className="mb-5 panel p-5 md:p-6">

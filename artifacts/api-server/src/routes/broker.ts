@@ -21,7 +21,7 @@ router.get("/broker/status", async (_req, res): Promise<void> => {
 });
 
 router.get("/broker/quotes", async (req, res): Promise<void> => {
-  if (!requireBrokerReadAccess(req.ip, req.header("x-broker-read-key"), res)) return;
+  if (!(await requireBrokerReadAccess(req.ip, req.header("x-broker-read-key"), res))) return;
   const symbols = typeof req.query.symbols === "string"
     ? req.query.symbols.split(",").map((symbol) => symbol.trim()).filter(Boolean)
     : [];
@@ -31,21 +31,21 @@ router.get("/broker/quotes", async (req, res): Promise<void> => {
 });
 
 router.get("/broker/account", async (_req, res): Promise<void> => {
-  if (!requireBrokerReadAccess(_req.ip, _req.header("x-broker-read-key"), res)) return;
+  if (!(await requireBrokerReadAccess(_req.ip, _req.header("x-broker-read-key"), res))) return;
   await respondWithBrokerData(res, () =>
     mt5BridgeAdapter.getAccountSnapshot().then((data) => GetBrokerAccountResponse.parse(data)),
   );
 });
 
 router.get("/broker/positions", async (_req, res): Promise<void> => {
-  if (!requireBrokerReadAccess(_req.ip, _req.header("x-broker-read-key"), res)) return;
+  if (!(await requireBrokerReadAccess(_req.ip, _req.header("x-broker-read-key"), res))) return;
   await respondWithBrokerData(res, () =>
     mt5BridgeAdapter.getPositions().then((data) => GetBrokerPositionsResponse.parse(data)),
   );
 });
 
 router.get("/broker/history", async (req, res): Promise<void> => {
-  if (!requireBrokerReadAccess(req.ip, req.header("x-broker-read-key"), res)) return;
+  if (!(await requireBrokerReadAccess(req.ip, req.header("x-broker-read-key"), res))) return;
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   await respondWithBrokerData(res, () =>
@@ -53,33 +53,47 @@ router.get("/broker/history", async (req, res): Promise<void> => {
   );
 });
 
-router.post("/broker/mt5/heartbeat", (req, res): void => {
+router.post("/broker/mt5/heartbeat", async (req, res): Promise<void> => {
   const presentedKey = req.header("x-mt5-bridge-key");
   const configuredKey = mt5BridgeAdapter.getApiKey();
   if (!presentedKey || !configuredKey || !secureCompare(presentedKey, configuredKey)) {
-    mt5BridgeAdapter.recordSecurityEvent("heartbeat.rejected", "Bridge authentication failed.");
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "heartbeat.rejected",
+      "Bridge authentication failed; bridge key was rejected.",
+    );
     res.status(401).json({ error: "Bridge authentication required." });
     return;
   }
   if (!isAllowedIp(req.ip)) {
-    mt5BridgeAdapter.recordSecurityEvent("heartbeat.rejected", "Bridge network was not allowlisted.");
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "heartbeat.rejected",
+      "Bridge network was not allowlisted.",
+    );
     res.status(403).json({ error: "Bridge network is not allowlisted." });
     return;
   }
   const body = SubmitMt5HeartbeatBody.safeParse(req.body);
   if (!body.success) {
-    mt5BridgeAdapter.recordSecurityEvent("heartbeat.rejected", "Bridge heartbeat payload was invalid.");
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "heartbeat.rejected",
+      "Bridge heartbeat payload was invalid.",
+    );
     res.status(400).json({ error: body.error.message });
     return;
   }
 
-  void mt5BridgeAdapter.receiveHeartbeat(body.data)
-    .then(() => res.status(204).send())
-    .catch((error: unknown) => {
-      res.status(error instanceof BrokerProtocolError ? 400 : 503).json({
-        error: error instanceof Error ? error.message : "Heartbeat rejected.",
-      });
+  try {
+    await mt5BridgeAdapter.receiveHeartbeat(body.data);
+    res.status(204).send();
+  } catch (error: unknown) {
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "heartbeat.rejected",
+      error instanceof Error ? error.message : "Heartbeat rejected.",
+    );
+    res.status(error instanceof BrokerProtocolError ? 400 : 503).json({
+      error: error instanceof Error ? error.message : "Heartbeat rejected.",
     });
+  }
 });
 
 async function respondWithBrokerData(
@@ -105,21 +119,33 @@ function isAllowedIp(ip: string | undefined): boolean {
   return isIpInAllowlist(ip, process.env["MT5_BRIDGE_ALLOWED_IPS"]);
 }
 
-function requireBrokerReadAccess(
+async function requireBrokerReadAccess(
   ip: string | undefined,
   presentedKey: string | undefined,
   res: Response,
-): boolean {
+): Promise<boolean> {
   const key = process.env["BROKER_READ_API_KEY"];
   if (!key) {
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "broker_read.rejected",
+      "Broker read access is not configured.",
+    );
     res.status(503).json({ error: "Broker read access is not configured." });
     return false;
   }
   if (!presentedKey || !secureCompare(presentedKey, key)) {
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "broker_read.rejected",
+      "Broker read key was rejected.",
+    );
     res.status(401).json({ error: "Broker read authentication required." });
     return false;
   }
   if (!isIpInAllowlist(ip, process.env["BROKER_READ_ALLOWED_IPS"])) {
+    await mt5BridgeAdapter.recordSecurityEvent(
+      "broker_read.rejected",
+      "Broker read network was not allowlisted.",
+    );
     res.status(403).json({ error: "Broker read network is not allowlisted." });
     return false;
   }

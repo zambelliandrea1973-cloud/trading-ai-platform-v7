@@ -85,6 +85,11 @@ export interface BrokerAuditEvent {
   detail?: string;
 }
 
+export interface BrokerDatabaseStatus {
+  status: "healthy" | "degraded" | "unknown";
+  message: string;
+}
+
 export interface BrokerStatus {
   provider: BrokerProvider;
   venue: BrokerVenue;
@@ -101,6 +106,7 @@ export interface BrokerStatus {
   bridgeVersion?: string;
   lastError?: string;
   auditTrail: BrokerAuditEvent[];
+  database: BrokerDatabaseStatus;
 }
 
 export class BrokerUnavailableError extends Error {
