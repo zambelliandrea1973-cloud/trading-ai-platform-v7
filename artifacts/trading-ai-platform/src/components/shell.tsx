@@ -1,4 +1,5 @@
-import { Activity, BarChart3, Cpu, History, LayoutDashboard, LineChart, Newspaper, Radar, Settings, ShieldCheck, SlidersHorizontal, WalletCards, X } from 'lucide-react';
+import { Activity, BarChart3, Cpu, History, LayoutDashboard, LineChart, LogOut, Newspaper, Radar, Settings, ShieldCheck, SlidersHorizontal, WalletCards, X } from 'lucide-react';
+import { useClerk, useUser } from '@clerk/react';
 import { Link, useLocation } from 'wouter';
 import { type ReactNode } from 'react';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -33,6 +34,10 @@ function Logo() {
 export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { locale, setLocale, t } = useI18n();
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const displayName = user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || t('shell.analyst');
+  const initials = displayName.slice(0, 2).toUpperCase();
   const navLabel = (key: string) => t(`nav.${key}` as Parameters<typeof t>[0]);
   return <div className="app-shell">
     <aside className="app-sidebar">
@@ -54,7 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="mb-2 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_0_3px_hsl(var(--accent)/.15)]" /><span className="mono text-[10px] uppercase tracking-wider text-accent">{t('shell.paperMode')}</span></div>
         <p className="text-[11px] leading-relaxed text-muted-foreground">{t('shell.noRealOrders')}</p>
       </div>
-      <div className="mt-auto hidden border-t border-sidebar-border pt-5 md:block"><div className="flex items-center gap-2.5"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary mono text-xs text-primary">AR</div><div><p className="text-xs font-semibold text-foreground">{t('shell.analyst')}</p><p className="mono text-[10px] text-muted-foreground">{t('shell.beginner')}</p></div></div></div>
+      <div className="mt-auto hidden border-t border-sidebar-border pt-5 md:block"><div className="flex items-center gap-2.5"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary mono text-xs text-primary">{initials}</div><div className="min-w-0"><p className="truncate text-xs font-semibold text-foreground">{displayName}</p><p className="mono text-[10px] text-muted-foreground">{t('shell.signedInAs')} · {t('shell.beginner')}</p></div></div><button type="button" onClick={() => signOut({ redirectUrl: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' })} className="mt-4 inline-flex w-full items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:border-destructive/40 hover:text-destructive" data-testid="button-sign-out"><LogOut size={14} />{t('shell.signOut')}</button></div>
     </aside>
     <main className="main-canvas">
       <header className="flex h-[68px] items-center justify-between border-b border-border px-5 md:px-9">

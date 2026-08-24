@@ -27,7 +27,16 @@ const messages = {
     'shell.dismiss': 'Chiudi avviso di stato',
     'shell.beginner': 'principiante / guidato',
     'shell.analyst': 'Area Analista',
+    'shell.signOut': 'Esci',
+    'shell.signedInAs': 'Accesso come',
     'language.label': 'Lingua',
+    'landing.eyebrow': 'VECTOR / AI · ACCESSO SICURO',
+    'landing.title': 'Decisioni più chiare. Rischio sotto controllo.',
+    'landing.subtitle': 'Accedi alla tua sala operativa PAPER per analizzare mercati, contesto macro e opportunità spiegabili.',
+    'landing.signIn': 'Accedi',
+    'landing.signUp': 'Crea account',
+    'landing.paperOnly': 'PAPER TRADING',
+    'landing.description': 'Ogni account mantiene il proprio spazio di lavoro. Nessun ordine reale viene inviato al mercato.',
 
     // Common
     'common.retryConnection': 'Riprova connessione',
@@ -46,6 +55,7 @@ const messages = {
     // Dashboard
     'dashboard.eyebrow': 'Panoramica Desk / 09:42 UTC',
     'dashboard.title': 'Buongiorno, analista.',
+    'dashboard.greeting': 'Buongiorno,',
     'dashboard.subtitle': 'Una lettura chiara del tuo portafoglio, del regime di mercato e di dove i tre cervelli concordano.',
     'dashboard.refresh': 'Aggiorna dati',
     'dashboard.paperEquity': 'Equity simulata',
@@ -385,7 +395,16 @@ const messages = {
     'shell.dismiss': 'Dismiss status alert',
     'shell.beginner': 'beginner / guided',
     'shell.analyst': 'Analyst workspace',
+    'shell.signOut': 'Sign out',
+    'shell.signedInAs': 'Signed in as',
     'language.label': 'Language',
+    'landing.eyebrow': 'VECTOR / AI · SECURE ACCESS',
+    'landing.title': 'Clearer decisions. Risk under control.',
+    'landing.subtitle': 'Sign in to your PAPER cockpit for explainable market, macro, and opportunity analysis.',
+    'landing.signIn': 'Sign in',
+    'landing.signUp': 'Create account',
+    'landing.paperOnly': 'PAPER TRADING',
+    'landing.description': 'Each account keeps its own workspace. No real order is sent to the market.',
 
     // Common
     'common.retryConnection': 'Retry connection',
@@ -404,6 +423,7 @@ const messages = {
     // Dashboard
     'dashboard.eyebrow': 'Desk overview / 09:42 UTC',
     'dashboard.title': 'Good morning, analyst.',
+    'dashboard.greeting': 'Good morning,',
     'dashboard.subtitle': 'A clear read on your paper book, the market regime, and where the three brains agree.',
     'dashboard.refresh': 'Refresh read',
     'dashboard.paperEquity': 'Paper equity',

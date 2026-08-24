@@ -1,4 +1,5 @@
 import { useState, type FormEvent, useMemo } from 'react';
+import { useUser } from '@clerk/react';
 import { ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleDot, Clock3, ExternalLink, Gauge, Info, LockKeyhole, Pause, Play, Plus, Radio, RefreshCw, ShieldAlert, SlidersHorizontal, Target, Timer, Wifi } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
 import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, getGetBrokerStatusQueryKey, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams } from '@workspace/api-client-react';
@@ -23,6 +24,8 @@ function verificationTone(status: 'confirmed' | 'contradicted' | 'duplicate' | '
 
 export function DashboardPage() {
   const { t } = useI18n();
+  const { user } = useUser();
+  const displayName = user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || t('shell.analyst');
   const mockOpps: Opportunity[] = useMemo(() => [
     { symbol: 'QQQ', signal: 'LONG BIAS', confidence: 78, risk: 'Moderato', state: 'Aumento di slancio', rationale: 'Migliora l\'ampiezza tecnica mentre il regime macro rimane a supporto.' },
     { symbol: 'GLD', signal: 'LONG BIAS', confidence: 71, risk: 'Basso', state: 'Trend intatto', rationale: 'La domanda difensiva e l\'indebolimento del rendimento reale sono allineati.' },
@@ -47,7 +50,7 @@ export function DashboardPage() {
   const refreshing = query.isFetching || marketsQuery.isFetching;
   
   return <div className="content-wrap">
-    <PageHeader eyebrow={t('dashboard.eyebrow')} title={t('dashboard.title')} subtitle={t('dashboard.subtitle')} action={<div className="flex items-center gap-2">{query.isError && <Badge tone="amber">{t('common.mockSnapshot')}</Badge>}<button onClick={() => query.refetch()} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:border-primary/50 hover:text-primary" data-testid="button-refresh-dashboard"><RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />{t('dashboard.refresh')}</button></div>} />
+     <PageHeader eyebrow={t('dashboard.eyebrow')} title={`${t('dashboard.greeting')} ${displayName}.`} subtitle={t('dashboard.subtitle')} action={<div className="flex items-center gap-2">{query.isError && <Badge tone="amber">{t('common.mockSnapshot')}</Badge>}<button onClick={() => query.refetch()} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:border-primary/50 hover:text-primary" data-testid="button-refresh-dashboard"><RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />{t('dashboard.refresh')}</button></div>} />
     <div className="mb-6 grid gap-3 md:grid-cols-4">
       <Metric label={t('dashboard.paperEquity')} value={`$${dashboard.equity.toLocaleString()}`} detail={`${t('dashboard.capital')} $${dashboard.paperCapital.toLocaleString()}`} tone="amber" icon={<WalletIcon />} />
       <Metric label={t('dashboard.dailyPnl')} value={`${dashboard.dailyPnl >= 0 ? '+' : ''}$${dashboard.dailyPnl.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} detail={t('dashboard.previousClose')} tone={dashboard.dailyPnl >= 0 ? 'positive' : 'negative'} icon={dashboard.dailyPnl >= 0 ? <ArrowUpRight size={16} className="text-accent" /> : <ArrowDownRight size={16} className="text-destructive" />} />

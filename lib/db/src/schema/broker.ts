@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const brokerConnectionsTable = pgTable("broker_connections", {
   id: serial("id").primaryKey(),
+  clerkUserId: text("clerk_user_id").notNull(),
   provider: text("provider").notNull().default("axi"),
   venue: text("venue").notNull().default("mt5"),
   mode: text("mode").notNull().default("paper"),
@@ -19,6 +20,9 @@ export const brokerConnectionsTable = pgTable("broker_connections", {
 
 export const auditEventsTable = pgTable("audit_events", {
   id: serial("id").primaryKey(),
+  // System and bridge health events are intentionally shared operational
+  // telemetry, rather than user-owned trading activity.
+  clerkUserId: text("clerk_user_id"),
   eventType: text("event_type").notNull(),
   actor: text("actor").notNull().default("system"),
   mode: text("mode").notNull().default("paper"),
@@ -36,6 +40,7 @@ export type AuditEvent = typeof auditEventsTable.$inferSelect;
 
 export const paperProposalsTable = pgTable("paper_proposals", {
   id: serial("id").primaryKey(),
+  clerkUserId: text("clerk_user_id").notNull(),
   clientProposalId: text("client_proposal_id").notNull().unique(),
   symbol: text("symbol").notNull(),
   side: text("side").notNull(),
