@@ -12,6 +12,46 @@ export interface AuditPersistenceState {
   message: string;
 }
 
+export interface BridgeAuditRepository {
+  list(): Promise<BrokerAuditEvent[]>;
+  append(event: BrokerAuditEvent): Promise<void>;
+}
+
+const postgresAuditRepository: BridgeAuditRepository = {
+  async list(): Promise<BrokerAuditEvent[]> {
+    const rows = await db
+      .select({
+        event: auditEventsTable.eventType,
+        actor: auditEventsTable.actor,
+        detail: auditEventsTable.nextValue,
+        at: auditEventsTable.createdAt,
+      })
+      .from(auditEventsTable)
+      .where(eq(auditEventsTable.mode, "paper"))
+      .orderBy(desc(auditEventsTable.createdAt))
+      .limit(MAX_PERSISTED_EVENTS);
+
+    return rows
+      .reverse()
+      .map((row) => ({
+        event: row.event,
+        actor: row.actor === "bridge" ? "bridge" : "system",
+        at: row.at.toISOString(),
+        detail: readDetail(row.detail),
+      }));
+  },
+
+  async append(event: BrokerAuditEvent): Promise<void> {
+    await db.insert(auditEventsTable).values({
+      eventType: event.event,
+      actor: event.actor,
+      mode: "paper",
+      nextValue: event.detail ? { detail: event.detail } : null,
+      createdAt: new Date(event.at),
+    });
+  },
+};
+
 /**
  * PostgreSQL-backed bridge audit history.
  *
@@ -21,34 +61,21 @@ export interface AuditPersistenceState {
  * require a process restart.
  */
 export class BridgeAuditStore {
+  private readonly repository: BridgeAuditRepository;
   private state: AuditPersistenceState = {
     status: "unknown",
     message: "Bridge audit persistence has not been checked yet.",
   };
 
+  constructor(repository: BridgeAuditRepository = postgresAuditRepository) {
+    this.repository = repository;
+  }
+
   async list(): Promise<BrokerAuditEvent[]> {
     try {
-      const rows = await db
-        .select({
-          event: auditEventsTable.eventType,
-          actor: auditEventsTable.actor,
-          detail: auditEventsTable.nextValue,
-          at: auditEventsTable.createdAt,
-        })
-        .from(auditEventsTable)
-        .where(eq(auditEventsTable.mode, "paper"))
-        .orderBy(desc(auditEventsTable.createdAt))
-        .limit(MAX_PERSISTED_EVENTS);
-
+      const events = await this.repository.list();
       this.markHealthy();
-      return rows
-        .reverse()
-        .map((row) => ({
-          event: row.event,
-          actor: row.actor === "bridge" ? "bridge" : "system",
-          at: row.at.toISOString(),
-          detail: readDetail(row.detail),
-        }));
+      return events;
     } catch (error) {
       this.markDegraded(error);
       return [];
@@ -57,13 +84,7 @@ export class BridgeAuditStore {
 
   async append(event: BrokerAuditEvent): Promise<void> {
     try {
-      await db.insert(auditEventsTable).values({
-        eventType: event.event,
-        actor: event.actor,
-        mode: "paper",
-        nextValue: event.detail ? { detail: event.detail } : null,
-        createdAt: new Date(event.at),
-      });
+      await this.repository.append(event);
       this.markHealthy();
     } catch (error) {
       this.markDegraded(error);

@@ -10,7 +10,7 @@ import {
   type NormalizedPosition,
   type NormalizedQuote,
 } from "./contract";
-import { bridgeAuditStore } from "./audit-store";
+import { bridgeAuditStore, type BridgeAuditStore } from "./audit-store";
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_HEARTBEAT_TTL_MS = 30_000;
@@ -24,6 +24,7 @@ export interface Mt5BridgeAdapterOptions {
   env?: Environment;
   fetchImpl?: FetchLike;
   now?: () => Date;
+  auditStore?: BridgeAuditStore;
 }
 
 interface BridgeConfig {
@@ -56,6 +57,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
   private readonly configurationError: string | undefined;
   private readonly fetchImpl: FetchLike;
   private readonly now: () => Date;
+  private readonly auditStore: BridgeAuditStore;
   private lastHeartbeatAt: string | undefined;
   private lastHealthCheckAt: string | undefined;
   private bridgeVersion: string | undefined;
@@ -68,6 +70,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
     const env = options.env ?? process.env;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.now = options.now ?? (() => new Date());
+    this.auditStore = options.auditStore ?? bridgeAuditStore;
 
     const bridgeUrl = env["MT5_BRIDGE_URL"];
     const apiKey = env["MT5_BRIDGE_API_KEY"];
@@ -120,7 +123,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
   }
 
   async getStatus(): Promise<BrokerStatus> {
-    const persistedAuditTrail = await bridgeAuditStore.list();
+    const persistedAuditTrail = await this.auditStore.list();
     this.auditTrail = persistedAuditTrail;
     if (this.configurationError) {
       return this.status("blocked", this.configurationError);
@@ -314,7 +317,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       bridgeVersion: this.bridgeVersion,
       lastError: this.lastError,
       auditTrail: [...this.auditTrail],
-      database: bridgeAuditStore.getState(),
+      database: this.auditStore.getState(),
     };
   }
 
@@ -341,7 +344,7 @@ export class Mt5BridgeAdapter implements BrokerAdapter {
       ...this.auditTrail,
       auditEvent,
     ].slice(-MAX_AUDIT_EVENTS);
-    await bridgeAuditStore.append(auditEvent);
+    await this.auditStore.append(auditEvent);
   }
 }
 
