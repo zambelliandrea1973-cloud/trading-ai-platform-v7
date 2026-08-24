@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, numeric, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -33,7 +33,7 @@ export const paperDecisionEventsTable = pgTable("paper_decision_events", {
  */
 export const paperTradesTable = pgTable("paper_trades", {
   id: serial("id").primaryKey(),
-  decisionEventId: text("decision_event_id").notNull(),
+  decisionEventId: integer("decision_event_id").notNull(),
   clerkUserId: text("clerk_user_id").notNull(),
   symbol: text("symbol").notNull(),
   side: text("side").notNull(), // long | short
@@ -69,7 +69,7 @@ export const paperTradesTable = pgTable("paper_trades", {
  */
 export const paperTradeMarksTable = pgTable("paper_trade_marks", {
   id: serial("id").primaryKey(),
-  paperTradeId: text("paper_trade_id").notNull(),
+  paperTradeId: integer("paper_trade_id").notNull(),
   marketPrice: numeric("market_price", { precision: 18, scale: 6 }).notNull(),
   unrealizedPnl: numeric("unrealized_pnl", { precision: 18, scale: 6 }).notNull(),
   capturedAt: timestamp("captured_at", { withTimezone: true }).defaultNow().notNull(),
