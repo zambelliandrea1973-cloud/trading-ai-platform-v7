@@ -20,3 +20,4 @@
 export * from "./trading";
 export * from "./broker";
 export * from "./paper-simulation";
+export * from "./historical-intelligence";
