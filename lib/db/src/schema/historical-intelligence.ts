@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, timestamp, jsonb, boolean, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, jsonb, boolean, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -22,6 +22,7 @@ export const historicalBarsTable = pgTable("historical_bars", {
   metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
 }, (table) => ({
   symbolTfTimeIdx: index("historical_bars_symbol_tf_time_idx").on(table.symbol, table.timeframe, table.openedAt),
+  sourceBarUnique: uniqueIndex("historical_bars_source_unique").on(table.symbol, table.timeframe, table.openedAt, table.source),
 }));
 
 /** Macro data with vintage-awareness to prevent look-ahead bias. */
@@ -36,6 +37,7 @@ export const macroObservationsTable = pgTable("macro_observations", {
   metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
 }, (table) => ({
   seriesVintageIdx: index("macro_series_vintage_idx").on(table.seriesId, table.vintageDate),
+  seriesObservationVintageUnique: uniqueIndex("macro_series_observation_vintage_unique").on(table.seriesId, table.observationDate, table.vintageDate, table.source),
 }));
 
 /** Normalized historical events and news catalysts used by Macro Brain. */
@@ -73,6 +75,7 @@ export const historicalFeatureSnapshotsTable = pgTable("historical_feature_snaps
   featureVersion: text("feature_version").notNull(),
 }, (table) => ({
   featureSymbolTimeIdx: index("historical_feature_symbol_time_idx").on(table.symbol, table.asOf),
+  featureUnique: uniqueIndex("historical_feature_unique").on(table.symbol, table.timeframe, table.asOf, table.featureVersion),
 }));
 
 /** Episodic-memory records: compact comparable historical situations and realized outcomes. */
@@ -96,6 +99,7 @@ export const historicalEpisodesTable = pgTable("historical_episodes", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   episodeSymbolIdx: index("historical_episodes_symbol_idx").on(table.symbol),
+  episodeFeatureUnique: uniqueIndex("historical_episode_feature_unique").on(table.featureSnapshotId),
 }));
 
 /** Statistical-memory buckets aggregate many comparable episodes, never a single anecdote. */
@@ -126,7 +130,9 @@ export const historicalCoverageTable = pgTable("historical_coverage", {
   qualityStatus: text("quality_status").notNull().default("insufficient"),
   source: text("source").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  coverageUnique: uniqueIndex("historical_coverage_unique").on(table.dataset, table.symbolOrSeries, table.timeframe, table.source),
+}));
 
 export const insertHistoricalBarSchema = createInsertSchema(historicalBarsTable).omit({ id: true });
 export const insertMacroObservationSchema = createInsertSchema(macroObservationsTable).omit({ id: true });
