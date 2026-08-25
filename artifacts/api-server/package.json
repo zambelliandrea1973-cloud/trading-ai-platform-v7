@@ -10,6 +10,7 @@
     "test": "tsx --test test/mt5-bridge-audit.test.ts test/broker-routes.test.ts test/news-verification-audit.test.ts",
     "test:postgres": "tsx --test test/postgres-audit.test.ts",
     "historical:bootstrap": "tsx ./src/jobs/bootstrap-historical-data.ts",
+    "historical:axi": "tsx ./src/jobs/bootstrap-axi-history.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -27,7 +28,7 @@
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
-    "@types/cors": "^2.8.19",
+    "@types/cors": "^2.8.6",
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
     "esbuild": "0.27.3",
