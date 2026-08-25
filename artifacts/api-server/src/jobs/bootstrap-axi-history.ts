@@ -46,7 +46,7 @@ async function bridgeGet<T>(path: string, params?: Record<string, string>): Prom
   const url = new URL(path, cfg.url.toString().endsWith("/") ? cfg.url : new URL(`${cfg.url.toString()}/`));
   for (const [key, value] of Object.entries(params ?? {})) url.searchParams.set(key, value);
   const response = await fetch(url, {
-    headers: { accept: "application/json", authorization: `Bearer ${cfg.apiKey}` },
+    headers: { accept: "application/json", "x-mt5-bridge-key": cfg.apiKey },
   });
   if (!response.ok) throw new Error(`MT5 historical bridge request failed: ${response.status} ${url.pathname}`);
   return await response.json() as T;
