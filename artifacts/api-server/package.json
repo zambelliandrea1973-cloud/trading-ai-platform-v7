@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test": "tsx --test test/mt5-bridge-audit.test.ts test/broker-routes.test.ts test/news-verification-audit.test.ts",
     "test:postgres": "tsx --test test/postgres-audit.test.ts",
+    "historical:bootstrap": "tsx ./src/jobs/bootstrap-historical-data.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
