@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { refreshAxiRules } from "./lib/axiRulesSentinel";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
@@ -47,5 +48,19 @@ app.use(
 );
 
 app.use("/api", router);
+
+// Axi Select engagement parameters are checked periodically against trusted primary/support pages.
+// Auto-activation occurs only when at least two sources agree; conflicts keep the last verified rules.
+if (process.env.NODE_ENV !== "test" && process.env.AXI_SENTINEL_ENABLED !== "false") {
+  const runSentinel = () => refreshAxiRules().then((result) => {
+    if (result.status === "UPDATED") logger.warn({ changes: result.changes }, "Axi Select rules updated automatically");
+    if (result.status === "CONFLICT" || result.status === "DEGRADED") logger.warn({ status: result.status }, "Axi Select sentinel could not safely update rules");
+  }).catch((error) => logger.warn({ error }, "Axi Select sentinel refresh failed"));
+
+  const startupTimer = setTimeout(runSentinel, 30_000);
+  startupTimer.unref?.();
+  const sentinelTimer = setInterval(runSentinel, 6 * 60 * 60 * 1000);
+  sentinelTimer.unref?.();
+}
 
 export default app;

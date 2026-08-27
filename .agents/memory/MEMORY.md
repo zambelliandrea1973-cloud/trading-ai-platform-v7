@@ -5,4 +5,5 @@
 - [Ephemeral PostgreSQL validation](ephemeral-postgres-validation.md) — local initdb clusters need an explicit test database before schema push.
 - [Clerk React compatibility](clerk-react-compatibility.md) — Clerk must use a React patch release listed in its peer range; unsupported patches can cause invalid hook calls.
 - [GitHub initial import](github-initial-import.md) — initialize empty repositories before Git-data uploads and avoid burst blob requests through the connector proxy.
+- [Git alignment diffing](git-alignment-diffing.md) — detect real upstream drift by diffing recursive blob SHAs, not commit messages or file counts alone.
 - [Broker read-status persistence](broker-read-status-persistence.md) — preserve broker endpoint outcomes with singleton, endpoint-specific atomic writes; never overwrite a whole snapshot.
