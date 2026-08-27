@@ -40,7 +40,7 @@ export const DEFAULT_AXI_RULES: AxiRulesSnapshot = {
   },
 };
 
-let activeRules = DEFAULT_AXI_RULES;
+let activeRules = structuredClone(DEFAULT_AXI_RULES);
 
 function normalizeText(html: string) {
   return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
@@ -50,11 +50,40 @@ function findNumber(text: string, patterns: RegExp[]): number | null {
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match?.[1]) {
-      const value = Number(match[1].replace(",", "."));
+      const value = Number(match[1].replace(/,/g, "."));
       if (Number.isFinite(value)) return value;
     }
   }
   return null;
+}
+
+function extractCommon(text: string) {
+  return {
+    standardProfitTargetPct: findNumber(text, [
+      /profit target(?: \(allocation account\))?[^0-9]{0,100}(\d+(?:[.,]\d+)?)\s*%/i,
+      /obiettivo di profitto(?: \(account di allocazione\))?[^0-9]{0,100}(\d+(?:[.,]\d+)?)\s*%/i,
+    ]),
+    standardMaxLossPct: findNumber(text, [
+      /maximum loss[^0-9]{0,100}-?(\d+(?:[.,]\d+)?)\s*%/i,
+      /perdita massima[^0-9]{0,100}-?(\d+(?:[.,]\d+)?)\s*%/i,
+    ]),
+    seedTrades: findNumber(text, [
+      /Seed[\s\S]{0,900}?Trades(?: Per Stage)?[^0-9]{0,80}(\d+)/i,
+      /Seme[\s\S]{0,900}?Operazioni per fase[^0-9]{0,80}(\d+)/i,
+    ]),
+    seedMinDays: findNumber(text, [
+      /Seed[\s\S]{0,900}?(?:Stage Duration|minimum stage duration)[^0-9]{0,80}(\d+)/i,
+      /Seme[\s\S]{0,900}?Durata(?: della fase)?[^0-9]{0,80}(\d+)/i,
+    ]),
+    proMProfitTargetPct: findNumber(text, [
+      /Pro M[\s\S]{0,1000}?profit target[^0-9]{0,100}(\d+(?:[.,]\d+)?)\s*%/i,
+      /Pro M[\s\S]{0,1000}?obiettivo di profitto[^0-9]{0,100}(\d+(?:[.,]\d+)?)\s*%/i,
+    ]),
+    proMMaxLossPct: findNumber(text, [
+      /Pro M[\s\S]{0,1200}?maximum loss[^0-9]{0,100}-?(\d+(?:[.,]\d+)?)\s*%/i,
+      /Pro M[\s\S]{0,1200}?perdita massima[^0-9]{0,100}-?(\d+(?:[.,]\d+)?)\s*%/i,
+    ]),
+  };
 }
 
 export type AxiSentinelResult = {
@@ -73,15 +102,7 @@ export async function refreshAxiRules(fetcher: typeof fetch = fetch): Promise<Ax
     try {
       const response = await fetcher(url, { headers: { "user-agent": "TradingAI-AxiSentinel/1.0" } });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = normalizeText(await response.text());
-      const extracted = {
-        standardProfitTargetPct: findNumber(text, [/profit target[^0-9]{0,80}(7(?:\.0+)?)\s*%/i, /obiettivo di profitto[^0-9]{0,80}(7(?:\.0+)?)\s*%/i]),
-        proMProfitTargetPct: findNumber(text, [/Pro M[^%]{0,500}?(10(?:\.0+)?)\s*%/i]),
-        standardMaxLossPct: findNumber(text, [/maximum loss[^0-9]{0,80}-?(7(?:\.0+)?)\s*%/i, /perdita massima[^0-9]{0,80}-?(7(?:\.0+)?)\s*%/i]),
-        proMMaxLossPct: findNumber(text, [/Pro M[^%]{0,700}?maximum loss[^0-9]{0,80}-?(10(?:\.0+)?)\s*%/i, /Pro M[^%]{0,700}?perdita massima[^0-9]{0,80}-?(10(?:\.0+)?)\s*%/i]),
-        seedTrades: findNumber(text, [/Seed[^0-9]{0,500}?Trades(?: Per Stage)?[^0-9]{0,40}(20)/i, /Seme[^0-9]{0,500}?Operazioni per fase[^0-9]{0,40}(20)/i]),
-        seedMinDays: findNumber(text, [/Seed[^0-9]{0,500}?(?:Stage Duration|minimum)[^0-9]{0,40}(30)/i, /Seme[^0-9]{0,500}?Durata[^0-9]{0,40}(30)/i]),
-      };
+      const extracted = extractCommon(normalizeText(await response.text()));
       observations.push(extracted);
       sourceResults.push({ url, ok: true, extracted });
     } catch {
@@ -98,16 +119,19 @@ export async function refreshAxiRules(fetcher: typeof fetch = fetch): Promise<Ax
     if (values.length < 2) return current;
     const counts = new Map<number, number>();
     for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
-    const [winner, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [current, 0];
-    return count >= 2 ? winner : null;
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    if (!ranked.length || ranked[0][1] < 2) return null;
+    return ranked[0][0];
   };
 
   const standardProfitTargetPct = consensus("standardProfitTargetPct", activeRules.stages.SEED.profitTargetPct);
   const standardMaxLossPct = consensus("standardMaxLossPct", activeRules.stages.SEED.maxLossPct);
   const seedTrades = consensus("seedTrades", activeRules.stages.SEED.minTrades);
   const seedMinDays = consensus("seedMinDays", activeRules.stages.SEED.minDays);
+  const proMProfitTargetPct = consensus("proMProfitTargetPct", activeRules.stages.PRO_M.profitTargetPct);
+  const proMMaxLossPct = consensus("proMMaxLossPct", activeRules.stages.PRO_M.maxLossPct);
 
-  if ([standardProfitTargetPct, standardMaxLossPct, seedTrades, seedMinDays].some((value) => value === null)) {
+  if ([standardProfitTargetPct, standardMaxLossPct, seedTrades, seedMinDays, proMProfitTargetPct, proMMaxLossPct].some((value) => value === null)) {
     return { checkedAt: new Date().toISOString(), status: "CONFLICT", activeRules, changes: [], sourceResults };
   }
 
@@ -121,8 +145,12 @@ export async function refreshAxiRules(fetcher: typeof fetch = fetch): Promise<Ax
   }
   if (next.stages.SEED.minTrades !== seedTrades) changes.push(`SEED: trades ${next.stages.SEED.minTrades} -> ${seedTrades}`);
   if (next.stages.SEED.minDays !== seedMinDays) changes.push(`SEED: min days ${next.stages.SEED.minDays} -> ${seedMinDays}`);
+  if (next.stages.PRO_M.profitTargetPct !== proMProfitTargetPct) changes.push(`PRO_M: profit target ${next.stages.PRO_M.profitTargetPct}% -> ${proMProfitTargetPct}%`);
+  if (next.stages.PRO_M.maxLossPct !== proMMaxLossPct) changes.push(`PRO_M: max loss ${next.stages.PRO_M.maxLossPct}% -> ${proMMaxLossPct}%`);
   next.stages.SEED.minTrades = seedTrades;
   next.stages.SEED.minDays = seedMinDays;
+  next.stages.PRO_M.profitTargetPct = proMProfitTargetPct;
+  next.stages.PRO_M.maxLossPct = proMMaxLossPct as number;
 
   if (changes.length) {
     next.version = `remote-${new Date().toISOString()}`;
