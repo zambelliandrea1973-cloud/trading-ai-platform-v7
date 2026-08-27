@@ -1,6 +1,4 @@
 import { Router, type IRouter } from "express";
-import { evaluateFundamentals } from "../lib/fundamentalBrain";
-import { evaluateMasterDecision } from "../lib/masterDecisionEngine";
 
 const router: IRouter = Router();
 
@@ -8,8 +6,6 @@ const opportunities = [
   { symbol: "EUR/USD", signal: "BUY", confidence: 78, risk: "MEDIUM", state: "Valutabile", rationale: "Trend positivo e conferma multi-timeframe; volatilità sopra la media richiede size ridotta." },
   { symbol: "XAU/USD", signal: "WAIT", confidence: 62, risk: "HIGH", state: "Attendere", rationale: "Flussi difensivi presenti, ma il prezzo è esteso e il Risk Brain non conferma l'ingresso." },
   { symbol: "NASDAQ 100", signal: "NO TRADE", confidence: 41, risk: "HIGH", state: "Bloccato", rationale: "Correlazioni instabili e spread di rischio elevato: la protezione ha priorità sul segnale." },
-  { symbol: "AAPL", signal: "BUY", confidence: 79, risk: "MEDIUM", state: "Qualità confermata", rationale: "Valutazione e crescita supportano il trend; la size resta vincolata al profilo PAPER." },
-  { symbol: "MSFT", signal: "BUY", confidence: 84, risk: "LOW", state: "Convergenza forte", rationale: "Crescita, margini e struttura tecnica mostrano una convergenza favorevole." },
 ];
 
 const markets = [
@@ -17,8 +13,6 @@ const markets = [
   { symbol: "XAU/USD", name: "Gold", assetClass: "Commodity", price: 2364.2, change: -8.4, changePercent: -0.35, sparkline: [2378, 2373, 2370, 2367, 2369, 2362, 2364], status: "Open" },
   { symbol: "NAS100", name: "Nasdaq 100", assetClass: "Index", price: 19428.6, change: -112.4, changePercent: -0.58, sparkline: [19620, 19580, 19510, 19560, 19480, 19390, 19428], status: "Open" },
   { symbol: "BTC/USD", name: "Bitcoin", assetClass: "Crypto", price: 64120, change: 840, changePercent: 1.33, sparkline: [62500, 63100, 62800, 63700, 63500, 64400, 64120], status: "Open" },
-  { symbol: "AAPL", name: "Apple", assetClass: "Equity", price: 189.84, change: 2.18, changePercent: 1.16, sparkline: [183, 185, 184, 187, 186, 188, 189.84], status: "Open" },
-  { symbol: "MSFT", name: "Microsoft", assetClass: "Equity", price: 417.32, change: 4.72, changePercent: 1.14, sparkline: [406, 409, 408, 412, 411, 415, 417.32], status: "Open" },
 ];
 
 type Horizon = "short" | "medium" | "long";
@@ -598,32 +592,6 @@ function historicalFor(symbol: string, locale: Locale): HistoricalPrecedent[] {
   return translated ? precedents.map((precedent) => ({ ...precedent, ...translated })) : precedents;
 }
 
-function fundamentalsFor(symbol: string, price: number) {
-  const inputs: Record<string, Parameters<typeof evaluateFundamentals>[0]> = {
-    AAPL: { price, epsTtm: 6.42, epsForward: 7.12, expectedEpsGrowthPct: 11, revenueGrowthPct: 8.2, operatingMarginPct: 30.8, roePct: 156, debtToEquity: 1.79, sectorPeMedian: 28 },
-    MSFT: { price, epsTtm: 11.8, epsForward: 13.2, expectedEpsGrowthPct: 14, revenueGrowthPct: 15.2, operatingMarginPct: 44.6, roePct: 35.8, debtToEquity: 0.42, sectorPeMedian: 28 },
-  };
-  return inputs[symbol] ?? { price };
-}
-
-function englishEngineText(value: string) {
-  const translations: Array<[string, string]> = [
-    ["Convergenza positiva dei cervelli disponibili; le cautele riducono la size prima di bloccare l'opportunità.", "The available brains converge positively; safeguards reduce size before blocking the opportunity."],
-    ["Convergenza negativa dei cervelli disponibili; l'operazione resta subordinata ai limiti di rischio.", "The available brains converge negatively; the proposal remains subject to risk limits."],
-    ["Segnale non abbastanza asimmetrico: meglio attendere una convergenza più netta.", "The signal is not asymmetric enough: wait for clearer convergence."],
-    ["Il segnale può essere valido, ma un limite hard di sicurezza impedisce l'esecuzione.", "The signal may be valid, but a hard safety limit blocks execution."],
-    ["Feed degradato: size ridotta.", "Degraded feed: reduced size."],
-    ["Risk Brain elevato: esposizione ridotta.", "Elevated Risk Brain: reduced exposure."],
-    ["Valutazione e crescita risultano complessivamente favorevoli sui dati disponibili.", "Valuation and growth are broadly favorable on the available data."],
-    ["Valutazione e crescita sono miste: serve conferma dagli altri cervelli e dal contesto settoriale.", "Valuation and growth are mixed: confirmation from the other brains and sector context is required."],
-    ["La valutazione appare tirata o la qualità/crescita non compensa il prezzo sui dati disponibili.", "Valuation appears stretched, or quality and growth do not compensate for price on the available data."],
-    ["Dati fondamentali insufficienti.", "Insufficient fundamental data."],
-    ["P/E valutato senza mediana settoriale: confronto meno robusto.", "P/E evaluated without a sector median: the comparison is less robust."],
-    ["Copertura dati fondamentali incompleta: ridurre il peso del segnale nel Master Decision Engine.", "Incomplete fundamental coverage: reduce this signal's weight in the Master Decision Engine."],
-  ];
-  return translations.find(([source]) => source === value)?.[1] ?? value;
-}
-
 function localeFrom(value: unknown): Locale {
   return value === "en" ? "en" : "it";
 }
@@ -631,7 +599,7 @@ function localeFrom(value: unknown): Locale {
 function assetContent(locale: Locale, symbol: string) {
   if (locale === "en") {
     return {
-       name: markets.find((item) => item.symbol === symbol)?.name ?? (symbol === "EUR/USD" ? "Euro / US Dollar" : symbol === "XAU/USD" ? "Gold" : symbol === "BTC/USD" ? "Bitcoin" : "Nasdaq 100"),
+      name: symbol === "EUR/USD" ? "Euro / US Dollar" : symbol === "XAU/USD" ? "Gold" : symbol === "BTC/USD" ? "Bitcoin" : "Nasdaq 100",
       explanation: "Positive trend and multi-timeframe confirmation; above-average volatility calls for smaller sizing.",
       technical: "Bullish structure and constructive momentum on the H1 timeframe.",
       fundamental: "The macro calendar does not offer a dominant direction.",
@@ -738,25 +706,6 @@ router.get("/assets/:symbol", async (req, res) => {
     ? { expected: newsSnapshot.sourceCoverage.expected, available: 0 }
     : newsSnapshot.sourceCoverage;
   const matchingItemIds = new Set(news.map((item) => item.id));
-  const masterDecision = evaluateMasterDecision({
-    horizon: "swing",
-    technical: { score: 76, confidence: 82 },
-    macroNews: { score: 51, confidence: 61 },
-    fundamentals: fundamentalsFor(symbol, market.price),
-    safety: { dataHealth: newsSourceStatus === "degraded" ? "DEGRADED" : "OK", brokerConnected: true, riskScore: 64 },
-  });
-  const fundamentalBrain = evaluateFundamentals(fundamentalsFor(symbol, market.price));
-  const localizedMasterDecision = locale === "en" ? {
-    ...masterDecision,
-    rationale: englishEngineText(masterDecision.rationale),
-    hardVetoReasons: masterDecision.hardVetoReasons.map(englishEngineText),
-    softGuards: masterDecision.softGuards.map(englishEngineText),
-  } : masterDecision;
-  const localizedFundamentalBrain = locale === "en" ? {
-    ...fundamentalBrain,
-    rationale: englishEngineText(fundamentalBrain.rationale),
-    warnings: fundamentalBrain.warnings.map(englishEngineText),
-  } : fundamentalBrain;
   res.json({
     symbol: market.symbol,
     name: content.name,
@@ -794,19 +743,6 @@ router.get("/assets/:symbol", async (req, res) => {
     newsSourceCoverage: assetNewsSourceCoverage,
     newsConflicts: newsSnapshot.conflicts.filter((conflict) => conflict.itemIds.some((id) => matchingItemIds.has(id))),
     newsDuplicates: newsSnapshot.duplicates.filter((duplicate) => duplicate.itemIds.some((id) => matchingItemIds.has(id))),
-    masterDecision: {
-      finalScore: localizedMasterDecision.finalScore,
-      confidence: localizedMasterDecision.confidence,
-      decision: localizedMasterDecision.decision,
-      sizeMultiplier: localizedMasterDecision.sizeMultiplier,
-      hardVeto: localizedMasterDecision.hardVeto,
-      hardVetoReasons: localizedMasterDecision.hardVetoReasons,
-      softGuards: localizedMasterDecision.softGuards,
-      weightsUsed: localizedMasterDecision.weightsUsed,
-      brainScores: localizedMasterDecision.brainScores,
-      rationale: localizedMasterDecision.rationale,
-    },
-    fundamentalBrain: localizedFundamentalBrain,
   });
 });
 
