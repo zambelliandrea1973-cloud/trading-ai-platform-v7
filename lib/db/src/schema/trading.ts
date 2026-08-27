@@ -26,9 +26,33 @@ export const paperAnalysesTable = pgTable("paper_analyses", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const decisionMemoryTable = pgTable("decision_memory", {
+  id: serial("id").primaryKey(),
+  externalId: text("external_id").notNull(),
+  symbol: text("symbol").notNull(),
+  algorithmVersion: text("algorithm_version").notNull(),
+  regime: text("regime").notNull(),
+  decision: text("decision").notNull(),
+  finalScore: numeric("final_score", { precision: 6, scale: 2 }),
+  confidence: numeric("confidence", { precision: 6, scale: 2 }).notNull(),
+  sizeMultiplier: numeric("size_multiplier", { precision: 6, scale: 3 }).notNull(),
+  rationale: text("rationale").notNull(),
+  brainSnapshot: jsonb("brain_snapshot").$type<Record<string, unknown>>().notNull(),
+  marketSnapshot: jsonb("market_snapshot").$type<Record<string, unknown>>().notNull(),
+  outcomeR: numeric("outcome_r", { precision: 10, scale: 4 }),
+  maxAdverseExcursionR: numeric("max_adverse_excursion_r", { precision: 10, scale: 4 }),
+  maxFavourableExcursionR: numeric("max_favourable_excursion_r", { precision: 10, scale: 4 }),
+  exitReason: text("exit_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+});
+
 export const insertMarketSnapshotSchema = createInsertSchema(marketSnapshotsTable);
 export const insertPaperAnalysisSchema = createInsertSchema(paperAnalysesTable);
+export const insertDecisionMemorySchema = createInsertSchema(decisionMemoryTable).omit({ id: true, createdAt: true });
 export type InsertMarketSnapshot = z.infer<typeof insertMarketSnapshotSchema>;
 export type InsertPaperAnalysis = z.infer<typeof insertPaperAnalysisSchema>;
+export type InsertDecisionMemory = z.infer<typeof insertDecisionMemorySchema>;
 export type MarketSnapshot = typeof marketSnapshotsTable.$inferSelect;
 export type PaperAnalysis = typeof paperAnalysesTable.$inferSelect;
+export type DecisionMemory = typeof decisionMemoryTable.$inferSelect;
