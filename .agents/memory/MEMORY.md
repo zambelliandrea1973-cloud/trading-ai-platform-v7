@@ -7,3 +7,4 @@
 - [GitHub initial import](github-initial-import.md) — initialize empty repositories before Git-data uploads and avoid burst blob requests through the connector proxy.
 - [Git alignment diffing](git-alignment-diffing.md) — detect real upstream drift by diffing recursive blob SHAs, not commit messages or file counts alone.
 - [Broker read-status persistence](broker-read-status-persistence.md) — preserve broker endpoint outcomes with singleton, endpoint-specific atomic writes; never overwrite a whole snapshot.
+- [Encoded asset path parameters](encoded-asset-path-parameters.md) — generated client path parameters are not URL-encoded; encode slash-bearing symbols before calling asset hooks.

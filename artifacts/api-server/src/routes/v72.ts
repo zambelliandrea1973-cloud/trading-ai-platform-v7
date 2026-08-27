@@ -1,11 +1,17 @@
 import { Router, type IRouter } from "express";
 import { db, decisionMemoryTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
 import { getActiveAxiRules, refreshAxiRules } from "../lib/axiRulesSentinel";
 import { evaluateAxiProtection, evaluateCrashSentinel, optimizeExecution, rankOpportunities, championChallengerDecision, postTradeDiagnosis } from "../lib/v72PerformanceEngine";
 import { allocatePortfolio, bullBearResearchJudge, evaluateDataIntegrity, mapGeopoliticalShock } from "../lib/v72AdvancedAgents";
 
 const router: IRouter = Router();
+
+function publicDecisionMemory<T extends { userId?: string | null }>(row: T) {
+  const { userId: _userId, ...record } = row;
+  return record;
+}
 
 router.get("/v72/schema", (_req, res) => {
   res.json({
@@ -43,12 +49,18 @@ router.post("/post-trade/diagnose", (req, res) => res.json(postTradeDiagnosis(re
 router.post("/validation/champion-challenger", (req, res) => res.json(championChallengerDecision(req.body?.champion, req.body?.challenger)));
 
 router.post("/decision-memory", async (req, res) => {
+  const userId = getAuth(req).userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   const body = req.body ?? {};
   if (!body.externalId || !body.symbol || !body.algorithmVersion || !body.regime || !body.decision) {
     res.status(400).json({ error: "externalId, symbol, algorithmVersion, regime and decision are required" });
     return;
   }
   const [created] = await db.insert(decisionMemoryTable).values({
+    userId,
     externalId: String(body.externalId),
     symbol: String(body.symbol),
     algorithmVersion: String(body.algorithmVersion),
@@ -66,10 +78,15 @@ router.post("/decision-memory", async (req, res) => {
     exitReason: null,
     closedAt: null,
   }).returning();
-  res.status(201).json(created);
+  res.status(201).json(publicDecisionMemory(created));
 });
 
 router.patch("/decision-memory/:externalId/outcome", async (req, res) => {
+  const userId = getAuth(req).userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   const body = req.body ?? {};
   const [updated] = await db.update(decisionMemoryTable).set({
     outcomeR: body.outcomeR == null ? null : String(body.outcomeR),
@@ -77,18 +94,26 @@ router.patch("/decision-memory/:externalId/outcome", async (req, res) => {
     maxFavourableExcursionR: body.maxFavourableExcursionR == null ? null : String(body.maxFavourableExcursionR),
     exitReason: body.exitReason == null ? null : String(body.exitReason),
     closedAt: new Date(),
-  }).where(eq(decisionMemoryTable.externalId, req.params.externalId)).returning();
+  }).where(and(eq(decisionMemoryTable.externalId, req.params.externalId), eq(decisionMemoryTable.userId, userId))).returning();
   if (!updated) {
     res.status(404).json({ error: "decision memory record not found" });
     return;
   }
-  res.json(updated);
+  res.json(publicDecisionMemory(updated));
 });
 
 router.get("/decision-memory/recent", async (req, res) => {
+  const userId = getAuth(req).userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50) || 50));
-  const rows = await db.select().from(decisionMemoryTable).orderBy(desc(decisionMemoryTable.createdAt)).limit(limit);
-  res.json(rows);
+  const rows = await db.select().from(decisionMemoryTable)
+    .where(eq(decisionMemoryTable.userId, userId))
+    .orderBy(desc(decisionMemoryTable.createdAt))
+    .limit(limit);
+  res.json(rows.map(publicDecisionMemory));
 });
 
 export default router;

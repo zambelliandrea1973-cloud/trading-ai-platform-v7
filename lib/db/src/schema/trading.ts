@@ -28,6 +28,7 @@ export const paperAnalysesTable = pgTable("paper_analyses", {
 
 export const decisionMemoryTable = pgTable("decision_memory", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   externalId: text("external_id").notNull(),
   symbol: text("symbol").notNull(),
   algorithmVersion: text("algorithm_version").notNull(),

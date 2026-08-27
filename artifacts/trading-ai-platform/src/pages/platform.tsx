@@ -1,8 +1,8 @@
-import { useState, type FormEvent, useMemo } from 'react';
+import { useState, type FormEvent, useMemo, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/react';
 import { ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleDot, Clock3, ExternalLink, Gauge, Info, LockKeyhole, Pause, Play, Plus, Radio, RefreshCw, ShieldAlert, SlidersHorizontal, Target, Timer, Wifi } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
-import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, getGetBrokerStatusQueryKey, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams } from '@workspace/api-client-react';
+import { useGetAssetAnalysis, getGetAssetAnalysisQueryKey, useGetBrokerStatus, getGetBrokerStatusQueryKey, useGetDashboard, useGetMarkets, useGetOpportunities, useHealthCheck, useGetNews, getGetNewsQueryKey, useEvaluateDecision, useGetAxiRules, useEvaluateAxiProtection, useRankV72Opportunities, useCreateDecisionMemory, useGetRecentDecisionMemory, getGetRecentDecisionMemoryQueryKey, type AssetAnalysis, type Dashboard, type Market, type Opportunity, type GetNewsParams, type MasterDecisionResult, type RankedOpportunity, type AxiProtectionResult } from '@workspace/api-client-react';
 import { Badge, MarketRow, Metric, Notice, OpportunityCard, PageButton, PageHeader, SectionLabel, StateMessage } from '@/components/common';
 import { useI18n } from '@/lib/i18n';
 
@@ -48,7 +48,7 @@ export function DashboardPage() {
   const oppsQuery = useGetOpportunities();
   const opportunities = useMockOr(oppsQuery.data, mockOpps);
   const refreshing = query.isFetching || marketsQuery.isFetching;
-  
+
   return <div className="content-wrap">
      <PageHeader eyebrow={t('dashboard.eyebrow')} title={`${t('dashboard.greeting')} ${displayName}.`} subtitle={t('dashboard.subtitle')} action={<div className="flex items-center gap-2">{query.isError && <Badge tone="amber">{t('common.mockSnapshot')}</Badge>}<button onClick={() => query.refetch()} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:border-primary/50 hover:text-primary" data-testid="button-refresh-dashboard"><RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />{t('dashboard.refresh')}</button></div>} />
     <div className="mb-6 grid gap-3 md:grid-cols-4">
@@ -90,6 +90,12 @@ export function MarketsPage() {
   return <div className="content-wrap"><PageHeader eyebrow={t('markets.eyebrow')} title={t('markets.title')} subtitle={t('markets.subtitle')} action={<Badge tone="neutral"><Radio size={11} />{markets.length} {t('common.instrument')}</Badge>} /><div className="mb-5 flex flex-wrap gap-2">{classes.map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-md px-3 py-2 text-xs font-semibold transition ${filter === item ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'}`} data-testid={`button-filter-${item.toLowerCase()}`}>{item}</button>)}</div>{query.isLoading ? <StateMessage kind="loading" title={t('markets.loading')} body="" /> : query.isError && !query.data ? <StateMessage kind="error" title={t('markets.unavailable')} body={t('markets.unavailableBody')} onRetry={() => query.refetch()} /> : <div className="space-y-2">{filtered.map((market) => <MarketRow market={market} key={market.symbol} />)}</div>}<p className="mt-4 mono text-[10px] text-muted-foreground">{t('markets.quotes')}</p></div>;
 }
 
+export function RankedOpportunityCard({ opportunity, index = 0 }: { opportunity: RankedOpportunity; index?: number }) {
+  const { t } = useI18n();
+  const buy = opportunity.decision.toLowerCase().includes('buy') || opportunity.decision.toLowerCase().includes('long');
+  return <Link href={`/assets/${encodeURIComponent(opportunity.symbol)}`} className={`panel panel-hover block p-5 no-underline fade-up delay-${Math.min(index + 1, 3)}`} data-testid={`card-ranked-${opportunity.symbol}`}><div className="mb-4 flex items-start justify-between"><div><span className="mono text-lg font-medium text-foreground">{opportunity.symbol}</span><div className="mt-1 flex items-center gap-1"><span className="text-xs text-muted-foreground">{opportunity.marketRegime}</span><span className="text-[10px] text-muted-foreground/60">&bull;</span><span className="text-xs text-muted-foreground">{opportunity.protectionMode}</span></div></div><Badge tone={buy ? 'positive' : opportunity.decision === 'WAIT' ? 'amber' : 'negative'}>{opportunity.decision}</Badge></div><p className="min-h-[40px] text-xs leading-relaxed text-muted-foreground">{opportunity.reasons[0]}</p><div className="mt-5 grid grid-cols-3 gap-2 border-t border-border pt-4"><div><span className="eyebrow">{t('opps.rank.score')}</span><p className="mono mt-1 text-sm text-foreground">{opportunity.opportunityScore}</p></div><div><span className="eyebrow">{t('opps.rank.finalScore')}</span><p className="mono mt-1 text-sm text-primary">{opportunity.finalScore ?? '-'}</p></div><div className="text-right"><span className="eyebrow">{t('opps.rank.sizeMult')}</span><p className="mono mt-1 text-sm text-foreground">{opportunity.sizeMultiplier}x</p></div></div></Link>;
+}
+
 export function OpportunitiesPage() {
   const { t } = useI18n();
   const mockOpps: Opportunity[] = useMemo(() => [
@@ -98,17 +104,91 @@ export function OpportunitiesPage() {
     { symbol: 'TLT', signal: 'WAIT', confidence: 63, risk: 'Moderato', state: 'In flessione', rationale: 'I tassi si avvicinano a una zona decisionale.' },
     { symbol: 'BTC-USD', signal: 'AVOID', confidence: 67, risk: 'Alto', state: 'Rumore elevato', rationale: 'Il prezzo è sotto il trend di breve termine.' },
   ], []);
-  const query = useGetOpportunities(); const opportunities = useMockOr(query.data, mockOpps); const [mode, setMode] = useState(t('opps.all'));
-  const filters = [t('opps.all'), 'LONG BIAS', 'WATCH', 'AVOID']; const filtered = mode === t('opps.all') ? opportunities : opportunities.filter((o) => o.signal === mode);
-  return <div className="content-wrap"><PageHeader eyebrow={t('opps.eyebrow')} title={t('opps.title')} subtitle={t('opps.subtitle')} action={<div className="flex items-center gap-2">{query.isError && <Badge tone="amber">{t('opps.mockBoard')}</Badge>}<Badge tone="amber"><Brain size={11} />{t('opps.threeBrain')}</Badge></div>} /><div className="mb-5 flex flex-wrap gap-2">{filters.map((item) => <button key={item} onClick={() => setMode(item)} className={`rounded-md px-3 py-2 text-xs font-semibold ${mode === item ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'}`} data-testid={`button-opportunity-filter-${item.toLowerCase().replaceAll(' ', '-')}`}>{item}</button>)}</div>{query.isLoading ? <StateMessage kind="loading" title={t('opps.title')} body="" /> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{filtered.map((item, index) => <OpportunityCard opportunity={item} index={index} key={item.symbol} />)}</div>}<div className="mt-6 rounded-lg border border-border bg-secondary/30 p-4 text-xs text-muted-foreground"><Info size={14} className="mr-2 inline text-primary" />{t('opps.agreement')}</div></div>;
+  const query = useGetOpportunities();
+  const opportunities = useMockOr(query.data, mockOpps);
+  const [mode, setMode] = useState(t('opps.all'));
+  const filters = [t('opps.all'), 'LONG BIAS', 'WATCH', 'AVOID'];
+  const filtered = mode === t('opps.all') ? opportunities : opportunities.filter((o) => o.signal === mode);
+
+  const rankMutation = useRankV72Opportunities();
+  const [rankedData, setRankedData] = useState<RankedOpportunity[] | null>(null);
+
+  // Use a string fingerprint to track if candidates changed, rather than object identity
+  const currentFingerprint = query.data ? query.data.map(o => `${o.symbol}-${o.confidence}`).join('|') : null;
+  const prevFingerprintRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (query.data && currentFingerprint && currentFingerprint !== prevFingerprintRef.current) {
+      prevFingerprintRef.current = currentFingerprint;
+      rankMutation.mutate({
+        data: {
+          candidates: query.data.map((item: Opportunity) => ({
+            symbol: item.symbol === 'NASDAQ 100' ? 'NAS100' : item.symbol,
+            expectedReturnR: item.confidence / 50,
+            expectedRiskR: 1,
+            confidence: item.confidence,
+            liquidityScore: 75,
+            executionCostR: 0.08,
+            masterInput: {
+              horizon: 'swing',
+              technical: { score: item.confidence, confidence: 60 },
+              macroNews: { score: 58, confidence: 60 },
+              safety: { dataHealth: 'OK', brokerConnected: true }
+            }
+          })),
+          axi: {
+            stage: 'PRE_SEED',
+            accountEquityUsd: 25184.6,
+            edgeScore: 50
+          },
+          crash: {
+            breadthPct: 50,
+            liquidityStress: 35,
+            crossAssetCorrelation: 0.45
+          }
+        }
+      }, {
+        onSuccess: (data) => setRankedData(data)
+      });
+    }
+  }, [query.data, currentFingerprint, rankMutation]);
+
+  return <div className="content-wrap"><PageHeader eyebrow={t('opps.eyebrow')} title={t('opps.title')} subtitle={t('opps.subtitle')} action={<div className="flex items-center gap-2">{query.isError && <Badge tone="amber">{t('opps.mockBoard')}</Badge>}<Badge tone="amber"><Brain size={11} />{t('opps.threeBrain')}</Badge></div>} /><div className="mb-5 flex flex-wrap gap-2">{filters.map((item) => <button key={item} onClick={() => setMode(item)} className={`rounded-md px-3 py-2 text-xs font-semibold ${mode === item ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'}`} data-testid={`button-opportunity-filter-${item.toLowerCase().replaceAll(' ', '-')}`}>{item}</button>)}</div>{query.isLoading || (query.data && rankMutation.isPending && !rankedData) ? <StateMessage kind="loading" title={t('opps.title')} body="" /> : <>{rankMutation.isError && <div className="mb-4"><Notice tone="negative">{t('opps.fallbackNotice')}</Notice></div>}<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{rankedData && !rankMutation.isError ? rankedData.filter((item: RankedOpportunity) => mode === t('opps.all') ? true : item.decision === mode || (mode === 'LONG BIAS' && item.decision === 'BUY')).map((item: RankedOpportunity, index: number) => <RankedOpportunityCard opportunity={item} index={index} key={item.symbol} />) : filtered.map((item, index) => <OpportunityCard opportunity={item} index={index} key={item.symbol} />)}</div></>}<div className="mt-6 rounded-lg border border-border bg-secondary/30 p-4 text-xs text-muted-foreground"><Info size={14} className="mr-2 inline text-primary" />{t('opps.agreement')}</div></div>;
 }
 
 export function AssetPage() {
   const { t, locale } = useI18n();
   const params = useParams<{ symbol: string }>();
-  const symbol = params.symbol || 'SPY';
+  const symbol = decodeURIComponent(params.symbol || 'SPY');
+  const assetPathSymbol = encodeURIComponent(symbol);
   const analysisParams = { locale };
-  const query = useGetAssetAnalysis(symbol, analysisParams, { query: { queryKey: getGetAssetAnalysisQueryKey(symbol, analysisParams) } });
+  const query = useGetAssetAnalysis(assetPathSymbol, analysisParams, { query: { queryKey: getGetAssetAnalysisQueryKey(assetPathSymbol, analysisParams) } });
+
+  const decisionMutation = useEvaluateDecision();
+  const [masterDecision, setMasterDecision] = useState<MasterDecisionResult | null>(null);
+  const prevAssetRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (query.data && prevAssetRef.current !== query.data.symbol) {
+      prevAssetRef.current = query.data.symbol;
+      const asset = query.data;
+      decisionMutation.mutate({
+        data: {
+          horizon: 'swing',
+          technical: { score: asset.technical.score, confidence: asset.technical.confidence },
+          macroNews: { score: asset.fundamental.score, confidence: asset.fundamental.confidence },
+          fundamentals: { price: asset.price },
+          safety: {
+            riskScore: asset.risk.score,
+            dataHealth: asset.newsSourceStatus === 'degraded' ? 'DEGRADED' : 'OK',
+            brokerConnected: true
+          }
+        }
+      }, {
+        onSuccess: (data) => setMasterDecision(data)
+      });
+    }
+  }, [query.data, decisionMutation]);
 
   const asset = query.data;
   const brain = asset ? [{ label: t('asset.techBrain'), data: asset.technical, color: 'text-accent' }, { label: t('asset.fundBrain'), data: asset.fundamental, color: 'text-primary' }, { label: t('asset.riskBrain'), data: asset.risk, color: 'text-[hsl(209_78%_65%)]' }] : [];
@@ -120,6 +200,46 @@ export function AssetPage() {
         <div className="panel p-5"><p className="eyebrow">{t('asset.lastPrice')}</p><p className="mono mt-3 text-4xl text-foreground">{asset.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p><div className="mt-5 flex items-center gap-2"><Badge tone={asset.decision.toLowerCase().includes('buy') ? 'positive' : asset.decision.toLowerCase().includes('sell') ? 'negative' : 'amber'}>{asset.decision}</Badge><span className="text-xs text-muted-foreground">{t('asset.modelConfidence')} {asset.confidence}%</span></div></div>
         <div className="panel p-5 lg:col-span-2"><div className="flex items-start justify-between"><div><p className="eyebrow">{t('asset.composite')}</p><h2 className="display mt-2 text-2xl font-bold text-foreground">{asset.decision === 'BUY' ? t('asset.consideredEntry') : t('asset.wait')}</h2></div><Badge tone={asset.riskLevel.toLowerCase().includes('high') || asset.riskLevel.toLowerCase().includes('alto') ? 'negative' : 'positive'}>{t('asset.riskLevel')} {asset.riskLevel.toLowerCase()}</Badge></div><p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{asset.explanation}</p><div className="mt-4"><Notice tone="teal"><span>{t('news.paperContext')}</span></Notice></div><div className="mt-5 flex items-center gap-4 border-t border-border pt-4"><span className="eyebrow">{t('asset.regime')}</span><span className="mono text-xs text-primary">{asset.regime}</span><span className="ml-auto mono text-xs text-muted-foreground">{t('common.confidence').toLowerCase()} {asset.confidence}%</span></div></div>
       </div>
+
+
+      {masterDecision && (
+        <div className="mb-6 panel p-5">
+           <SectionLabel aside={<Badge tone={masterDecision.decision.includes('BUY') ? 'positive' : masterDecision.decision === 'WAIT' ? 'amber' : 'negative'}>{masterDecision.decision}</Badge>}>{t('asset.v72decision')}</SectionLabel>
+           <p className="mt-2 text-sm text-foreground mb-4">{masterDecision.rationale}</p>
+
+           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <div>
+                 <span className="eyebrow block mb-1">{t('opps.rank.finalScore')}</span>
+                 <span className="mono text-lg">{masterDecision.finalScore}</span>
+              </div>
+              <div>
+                 <span className="eyebrow block mb-1">{t('common.confidence')}</span>
+                 <span className="mono text-lg">{masterDecision.confidence}%</span>
+              </div>
+              <div>
+                 <span className="eyebrow block mb-1">{t('asset.sizeMultiplier')}</span>
+                 <span className="mono text-lg">{masterDecision.sizeMultiplier}x</span>
+              </div>
+           </div>
+
+           {masterDecision.hardVeto && (
+             <div className="mb-4">
+               <Notice tone="negative">
+                 <span><strong>{t('asset.hardVeto')}:</strong> {masterDecision.hardVetoReasons.join(', ')}</span>
+               </Notice>
+             </div>
+           )}
+
+           {masterDecision.softGuards.length > 0 && (
+             <div className="mt-4">
+               <span className="eyebrow block mb-2">{t('asset.softGuards')}</span>
+               <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                 {masterDecision.softGuards.map((g, i) => <li key={i}>{g}</li>)}
+               </ul>
+             </div>
+           )}
+        </div>
+      )}
 
       <SectionLabel aside={<Badge tone="neutral">{t('asset.directional')}</Badge>}>{t('asset.detail')}</SectionLabel>
       <div className="mb-6 grid gap-3 lg:grid-cols-3">
@@ -190,9 +310,57 @@ export function SimulatorPage() {
     { symbol: 'GLD', name: 'SPDR Gold Shares', assetClass: 'Materie Prime', price: 214.66, change: 0.84, changePercent: 0.39, sparkline: [3, 3.4, 3.1, 3.9, 4, 4.4, 4.8], status: t('common.open') },
     { symbol: 'TLT', name: 'iShares 20+ Year Treasury', assetClass: t('news.catMacroRates'), price: 91.27, change: -0.3, changePercent: -0.33, sparkline: [5, 5.4, 4, 4.3, 3.8, 3.1, 2.7], status: t('common.open') },
   ], [t]);
-  const [symbol, setSymbol] = useState('QQQ'); const [side, setSide] = useState('Buy'); const [size, setSize] = useState('5000'); const [submitted, setSubmitted] = useState(false);
-  const submit = (event: FormEvent) => { event.preventDefault(); setSubmitted(true); };
-  return <div className="content-wrap"><PageHeader eyebrow={t('simulator.eyebrow')} title={t('simulator.title')} subtitle={t('simulator.subtitle')} action={<Badge tone="amber"><SlidersHorizontal size={11} />{t('simulator.builder')}</Badge>} /><div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]"><form className="panel p-5 md:p-6" onSubmit={submit}><SectionLabel>{t('simulator.inputs')}</SectionLabel><div className="space-y-5"><label className="block"><span className="eyebrow">{t('simulator.instrument')}</span><select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="mt-2 w-full rounded-md border border-input bg-background px-3 py-3 text-sm text-foreground" data-testid="select-simulator-symbol">{mockMarkets.map((m) => <option value={m.symbol} key={m.symbol}>{m.symbol} — {m.name}</option>)}</select></label><div><span className="eyebrow">{t('simulator.direction')}</span><div className="mt-2 grid grid-cols-2 gap-2">{['Buy', 'Sell'].map((item) => <button type="button" onClick={() => setSide(item)} className={`rounded-md border py-3 text-sm font-semibold ${side === item ? item === 'Buy' ? 'border-accent bg-accent/10 text-accent' : 'border-destructive bg-destructive/10 text-destructive' : 'border-border text-muted-foreground'}`} key={item} data-testid={`button-side-${item.toLowerCase()}`}>{item === 'Buy' ? t('simulator.buy') : t('simulator.sell')}</button>)}</div></div><label className="block"><span className="eyebrow">{t('simulator.notional')}</span><div className="mt-2 flex items-center rounded-md border border-input bg-background px-3"><span className="mono text-muted-foreground">$</span><input value={size} onChange={(e) => setSize(e.target.value)} type="number" min="100" step="100" className="w-full bg-transparent px-2 py-3 mono text-sm text-foreground outline-none" data-testid="input-paper-notional" /></div></label><label className="block"><span className="eyebrow">{t('simulator.why')}</span><textarea placeholder={t('simulator.whyPlaceholder')} className="mt-2 min-h-[92px] w-full resize-none rounded-md border border-input bg-background px-3 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground" data-testid="input-trade-rationale" /></label><button type="submit" className="w-full rounded-md bg-primary py-3 text-sm font-bold text-primary-foreground transition hover:brightness-110" data-testid="button-generate-proposal"><Play size={15} className="mr-2 inline" />{t('simulator.generate')}</button></div></form><div className="space-y-4"><div className="panel p-5 md:p-6"><SectionLabel aside={<Badge tone="neutral">{t('common.mock')}</Badge>}>{t('simulator.preview')}</SectionLabel><div className="flex items-center justify-between border-b border-border py-4"><div><span className="mono text-2xl text-foreground">{symbol}</span><p className="mt-1 text-xs text-muted-foreground">{t('simulator.currentProposal')}</p></div><Badge tone={side === 'Buy' ? 'positive' : 'negative'}>{side === 'Buy' ? t('simulator.buy') : t('simulator.sell')}</Badge></div><div className="grid grid-cols-2 gap-4 py-5"><div><p className="eyebrow">{t('history.notional')}</p><p className="mono mt-2 text-xl text-foreground">${Number(size || 0).toLocaleString()}</p></div><div><p className="eyebrow">{t('simulator.maxLoss')}</p><p className="mono mt-2 text-xl text-primary">${Math.round(Number(size || 0) * .02).toLocaleString()}</p></div></div><Notice tone="teal"><span>{t('simulator.boundedNotice')}</span></Notice>{submitted && <div className="mt-4 flex items-center gap-2 rounded-md border border-accent/25 bg-accent/5 p-3 text-xs text-accent" data-testid="status-proposal-created"><CheckCircle2 size={15} />{t('simulator.createdLocally')}</div>}</div><div className="panel p-5"><SectionLabel>{t('simulator.before')}</SectionLabel><ul className="space-y-3 text-xs text-muted-foreground"><li className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 text-accent" />{t('simulator.check1')}</li><li className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 text-accent" />{t('simulator.check2')}</li><li className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 text-accent" />{t('simulator.check3')}</li></ul></div></div></div></div>;
+
+  const [symbol, setSymbol] = useState('QQQ');
+  const [side, setSide] = useState('Buy');
+  const [size, setSize] = useState('5000');
+  const [rationale, setRationale] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const decisionMutation = useEvaluateDecision();
+  const memoryMutation = useCreateDecisionMemory();
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitted(false);
+    setErrorMsg('');
+
+    decisionMutation.mutate({
+      data: {
+        horizon: 'swing',
+        technical: { score: side === 'Buy' ? 74 : 26, confidence: 60 },
+        macroNews: { score: 55, confidence: 60 },
+        safety: { dataHealth: 'OK', brokerConnected: true }
+      }
+    }, {
+      onSuccess: (decisionData) => {
+        memoryMutation.mutate({
+          data: {
+            externalId: crypto.randomUUID(),
+            symbol,
+            algorithmVersion: 'v7.2',
+            regime: 'BALANCED',
+            decision: decisionData.decision,
+            finalScore: decisionData.finalScore ?? 50,
+            confidence: decisionData.confidence,
+            sizeMultiplier: decisionData.sizeMultiplier,
+            rationale: rationale || t('simulator.manualProposal'),
+            brainSnapshot: decisionData.brainScores,
+            marketSnapshot: { side, size }
+          }
+        }, {
+          onSuccess: () => setSubmitted(true),
+          onError: () => setErrorMsg(t('simulator.error'))
+        });
+      },
+      onError: () => setErrorMsg(t('simulator.error'))
+    });
+  };
+
+  const isPending = decisionMutation.isPending || memoryMutation.isPending;
+
+  return <div className="content-wrap"><PageHeader eyebrow={t('simulator.eyebrow')} title={t('simulator.title')} subtitle={t('simulator.subtitle')} action={<Badge tone="amber"><SlidersHorizontal size={11} />{t('simulator.builder')}</Badge>} /><div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]"><form className="panel p-5 md:p-6" onSubmit={submit}><SectionLabel>{t('simulator.inputs')}</SectionLabel><div className="space-y-5"><label className="block"><span className="eyebrow">{t('simulator.instrument')}</span><select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="mt-2 w-full rounded-md border border-input bg-background px-3 py-3 text-sm text-foreground" data-testid="select-simulator-symbol">{mockMarkets.map((m) => <option value={m.symbol} key={m.symbol}>{m.symbol} — {m.name}</option>)}</select></label><div><span className="eyebrow">{t('simulator.direction')}</span><div className="mt-2 grid grid-cols-2 gap-2">{['Buy', 'Sell'].map((item) => <button type="button" onClick={() => setSide(item)} className={`rounded-md border py-3 text-sm font-semibold ${side === item ? item === 'Buy' ? 'border-accent bg-accent/10 text-accent' : 'border-destructive bg-destructive/10 text-destructive' : 'border-border text-muted-foreground'}`} key={item} data-testid={`button-side-${item.toLowerCase()}`}>{item === 'Buy' ? t('simulator.buy') : t('simulator.sell')}</button>)}</div></div><label className="block"><span className="eyebrow">{t('simulator.notional')}</span><div className="mt-2 flex items-center rounded-md border border-input bg-background px-3"><span className="mono text-muted-foreground">$</span><input value={size} onChange={(e) => setSize(e.target.value)} type="number" min="100" step="100" className="w-full bg-transparent px-2 py-3 mono text-sm text-foreground outline-none" data-testid="input-paper-notional" /></div></label><label className="block"><span className="eyebrow">{t('simulator.why')}</span><textarea value={rationale} onChange={(e) => setRationale(e.target.value)} placeholder={t('simulator.whyPlaceholder')} className="mt-2 min-h-[92px] w-full resize-none rounded-md border border-input bg-background px-3 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground" data-testid="input-trade-rationale" /></label><button type="submit" disabled={isPending} className="w-full rounded-md bg-primary py-3 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50" data-testid="button-generate-proposal"><Play size={15} className="mr-2 inline" />{isPending ? t('simulator.saving') : t('simulator.generate')}</button></div></form><div className="space-y-4"><div className="panel p-5 md:p-6"><SectionLabel>{t('simulator.preview')}</SectionLabel><div className="flex items-center justify-between border-b border-border py-4"><div><span className="mono text-2xl text-foreground">{symbol}</span><p className="mt-1 text-xs text-muted-foreground">{t('simulator.currentProposal')}</p></div><Badge tone={side === 'Buy' ? 'positive' : 'negative'}>{side === 'Buy' ? t('simulator.buy') : t('simulator.sell')}</Badge></div><div className="grid grid-cols-2 gap-4 py-5"><div><p className="eyebrow">{t('history.notional')}</p><p className="mono mt-2 text-xl text-foreground">${Number(size || 0).toLocaleString()}</p></div><div><p className="eyebrow">{t('simulator.maxLoss')}</p><p className="mono mt-2 text-xl text-primary">${Math.round(Number(size || 0) * .02).toLocaleString()}</p></div></div><Notice tone="teal"><span>{t('simulator.boundedNotice')}</span></Notice>{errorMsg && <div className="mt-4"><Notice tone="negative">{errorMsg}</Notice></div>}{submitted && <div className="mt-4 flex items-center gap-2 rounded-md border border-accent/25 bg-accent/5 p-3 text-xs text-accent" data-testid="status-proposal-created"><CheckCircle2 size={15} />{t('simulator.success')}</div>}</div><div className="panel p-5"><SectionLabel>{t('simulator.before')}</SectionLabel><ul className="space-y-3 text-xs text-muted-foreground"><li className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 text-accent" />{t('simulator.check1')}</li><li className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 text-accent" />{t('simulator.check2')}</li><li className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 text-accent" />{t('simulator.check3')}</li></ul></div></div></div></div>;
 }
 
 export function NewsPage() {
@@ -363,11 +531,55 @@ export function BacktestPage() {
 }
 
 export function HistoryPage() {
-  const { t } = useI18n();
-  const rows = [[`12 ${t('history.jun')}`, 'QQQ', t('history.buy'), '$5,000', '+$184.20', t('history.closed')], [`10 ${t('history.jun')}`, 'GLD', t('history.buy'), '$3,200', '+$76.80', t('history.closed')], [`08 ${t('history.jun')}`, 'BTC-USD', t('history.sell'), '$2,500', '-$112.50', t('history.closed')], [`04 ${t('history.jun')}`, 'SPY', t('history.buy'), '$7,500', '+$241.20', t('history.closed')]];
-  return <div className="content-wrap"><PageHeader eyebrow={t('history.eyebrow')} title={t('history.title')} subtitle={t('history.subtitle')} action={<Badge tone="neutral"><HistoryIcon />{t('history.proposals')}</Badge>} /><Notice><span><strong>{t('history.mockHistory')}</strong> {t('history.notPersisted')}</span></Notice><div className="mt-5 panel overflow-hidden"><div className="grid grid-cols-[.8fr_1fr_.8fr_.8fr_1fr_.8fr] gap-3 border-b border-border bg-secondary/40 px-5 py-3 eyebrow"><span>{t('history.date')}</span><span>{t('history.instrument')}</span><span>{t('history.side')}</span><span>{t('history.notional')}</span><span>{t('history.result')}</span><span>{t('history.status')}</span></div>{rows.map((row) => <div className="grid grid-cols-[.8fr_1fr_.8fr_.8fr_1fr_.8fr] items-center gap-3 border-b border-border px-5 py-4 last:border-0" key={row[0]}>{row.map((cell, i) => <span className={`mono text-xs ${i === 4 ? cell.startsWith('+') ? 'text-accent' : 'text-destructive' : i === 5 ? 'text-muted-foreground' : 'text-foreground'}`} key={cell}>{cell}</span>)}</div>)}</div></div>;
+  const { t, locale } = useI18n();
+  const query = useGetRecentDecisionMemory({ limit: 50 }, { query: { queryKey: getGetRecentDecisionMemoryQueryKey({ limit: 50 }) } });
+
+  return (
+    <div className="content-wrap">
+      <PageHeader eyebrow={t('history.eyebrow')} title={t('history.title')} subtitle={t('history.subtitle')} action={<Badge tone="neutral"><Clock3 size={11} />{query.data?.length ?? 0} {t('history.proposals')}</Badge>} />
+
+      {query.isLoading ? (
+        <StateMessage kind="loading" title={t('history.loading')} body="" />
+      ) : query.isError ? (
+        <StateMessage kind="error" title={t('error.title')} body={t('error.desc')} onRetry={() => query.refetch()} />
+      ) : !query.data || query.data.length === 0 ? (
+        <StateMessage kind="empty" title={t('history.empty')} body="" />
+      ) : (
+        <div className="panel overflow-hidden">
+          <div className="divide-y divide-border">
+            {query.data.map(item => (
+              <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr] gap-3 p-4 md:px-5 items-center" key={item.id}>
+                <div>
+                  <span className="mono text-sm font-medium text-foreground">{item.symbol}</span>
+                  <p className="mt-1 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleDateString(locale === 'it' ? 'it-IT' : 'en-GB')}</p>
+                </div>
+                <div>
+                  <p className="eyebrow">{t('history.side')}</p>
+                  <p className="mono mt-1 text-sm text-foreground">{item.decision}</p>
+                </div>
+                <div>
+                  <p className="eyebrow">{t('opps.rank.finalScore')}</p>
+                  <p className="mono mt-1 text-sm text-foreground">{item.finalScore ?? '-'}</p>
+                </div>
+                <div>
+                  <p className="eyebrow">{t('history.confidence')}</p>
+                  <p className="mono mt-1 text-sm text-foreground">{item.confidence}%</p>
+                </div>
+                <div>
+                  <p className="eyebrow">{t('history.sizeMult')}</p>
+                  <p className="mono mt-1 text-sm text-foreground">{item.sizeMultiplier}x</p>
+                </div>
+                <div className="text-right">
+                  <Badge tone={!item.closedAt ? 'amber' : 'neutral'}>{!item.closedAt ? t('common.open') : t('history.closed')}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
-function HistoryIcon() { return <Clock3 size={12} />; }
 
 export function SystemPage() {
   const { t } = useI18n();
@@ -375,6 +587,30 @@ export function SystemPage() {
   const online = query.data?.status === 'ok' || query.data?.status === 'healthy';
   const brokerQuery = useGetBrokerStatus({ query: { queryKey: getGetBrokerStatusQueryKey(), refetchInterval: 5_000 } });
   const broker = brokerQuery.data;
+  const rulesQuery = useGetAxiRules();
+  const protectionMutation = useEvaluateAxiProtection();
+  const [protectionResult, setProtectionResult] = useState<AxiProtectionResult | null>(null);
+
+  useEffect(() => {
+    if (rulesQuery.data && !protectionResult && !protectionMutation.isPending) {
+      protectionMutation.mutate({
+        data: {
+          stage: 'PRE_SEED',
+          accountEquityUsd: 25184.6,
+          allocationStartBalance: 25000,
+          allocationEquity: 25184.6,
+          monthStartEquity: 25000,
+          currentEquity: 25184.6,
+          closedTrades: 0,
+          stageDays: 0,
+          edgeScore: 50
+        }
+      }, {
+        onSuccess: (data) => setProtectionResult(data)
+      });
+    }
+  }, [rulesQuery.data, protectionResult, protectionMutation]);
+
   const services = [
     [t('system.marketData'), t('system.delayed15m'), true],
     [t('system.analysisEngine'), t('system.threeBrainsReady'), true],
@@ -463,6 +699,66 @@ export function SystemPage() {
       {broker?.auditTrail?.length ? <div className="divide-y divide-border">{broker.auditTrail.slice(-5).reverse().map((event) => <div className="flex items-start justify-between gap-4 py-3" key={`${event.at}-${event.event}`}><div><p className="mono text-xs text-foreground">{event.event}</p><p className="mt-1 text-xs text-muted-foreground">{event.detail ?? event.actor}</p></div><time className="shrink-0 mono text-[10px] text-muted-foreground">{formatTimestamp(event.at)}</time></div>)}</div> : <p className="text-sm text-muted-foreground">{t('broker.noAudit')}</p>}
     </div>
     <div className="panel p-5 md:p-6"><SectionLabel aside={<Badge tone={online ? 'positive' : 'amber'}>{online ? t('system.healthy') : t('system.mockFallback')}</Badge>}>{t('system.serviceChecks')}</SectionLabel><div className="divide-y divide-border">{services.map(([name, status, good]) => <div className="flex items-center justify-between py-4" key={name as string}><div className="flex items-center gap-3"><span className={`h-2 w-2 rounded-full ${good ? 'bg-accent' : 'bg-primary'}`} /><span className="text-sm text-foreground">{name}</span></div><span className={`mono text-xs ${good ? 'text-accent' : 'text-primary'}`}>{status}</span></div>)}</div></div>
+
+    <div className="mb-6 grid gap-5 lg:grid-cols-2 mt-6">
+      <section className="panel p-5">
+         <SectionLabel>{t('system.axiMode')}</SectionLabel>
+         {rulesQuery.isLoading ? <div className="skeleton h-16 w-full mt-4" /> : rulesQuery.isError ? <div className="text-destructive text-sm">{t('system.failedLoadRules')}</div> : (
+           <>
+             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                <div className="rounded-md bg-secondary/30 p-3">
+                   <span className="eyebrow block">{t('system.stage')}</span>
+                   <span className="mono mt-2 text-lg text-foreground block">PRE_SEED</span>
+                </div>
+                <div className="rounded-md bg-secondary/30 p-3">
+                   <span className="eyebrow block">{t('system.protectionMode')}</span>
+                   <span className="mono mt-2 text-lg text-primary block">{protectionResult?.mode ?? '-'}</span>
+                </div>
+                <div className="rounded-md bg-secondary/30 p-3">
+                   <span className="eyebrow block">{t('system.baseSizeMult')}</span>
+                   <span className="mono mt-2 text-lg text-foreground block">{protectionResult?.baseSizeMultiplier ?? '-'}x</span>
+                </div>
+                <div className="rounded-md bg-secondary/30 p-3">
+                   <span className="eyebrow block">{t('system.progReady')}</span>
+                   <span className="mono mt-2 text-lg text-foreground block">{protectionResult?.progressionReady ? t('system.yes') : t('system.no')}</span>
+                </div>
+             </div>
+             <div className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">
+                <p>{t('system.version')}: {rulesQuery.data?.version} &middot; {t('system.verifiedAt')}: {new Date(rulesQuery.data?.verifiedAt || '').toLocaleString()}</p>
+                <p className="mt-1">{t('system.weeklyCadence')}</p>
+             </div>
+           </>
+         )}
+      </section>
+
+      {rulesQuery.data && rulesQuery.data.stages['PRE_SEED'] && (
+      <section className="panel p-5">
+         <SectionLabel>{t('system.preSeedRules')}</SectionLabel>
+         <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 mt-4 text-sm">
+            <div>
+                <span className="text-muted-foreground block text-[10px] uppercase tracking-widest">{t('system.minEquity')}</span>
+                <span className="mono">${rulesQuery.data.stages['PRE_SEED'].minEquityUsd}</span>
+            </div>
+            <div>
+                <span className="text-muted-foreground block text-[10px] uppercase tracking-widest">{t('system.minEdgeScore')}</span>
+                <span className="mono">{rulesQuery.data.stages['PRE_SEED'].minEdgeScore}</span>
+            </div>
+            <div>
+                <span className="text-muted-foreground block text-[10px] uppercase tracking-widest">{t('system.maxLossPct')}</span>
+                <span className="mono">{rulesQuery.data.stages['PRE_SEED'].maxLossPct}%</span>
+            </div>
+            <div>
+                <span className="text-muted-foreground block text-[10px] uppercase tracking-widest">{t('system.minDays')}</span>
+                <span className="mono">{rulesQuery.data.stages['PRE_SEED'].minDays ?? '-'}</span>
+            </div>
+            <div>
+                <span className="text-muted-foreground block text-[10px] uppercase tracking-widest">{t('system.minTrades')}</span>
+                <span className="mono">{rulesQuery.data.stages['PRE_SEED'].minTrades ?? '-'}</span>
+            </div>
+         </div>
+      </section>
+      )}
+    </div>
   </div>;
 }
 

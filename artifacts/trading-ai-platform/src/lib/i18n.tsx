@@ -104,6 +104,15 @@ const messages = {
     'opps.avoid': 'AVOID',
     'opps.agreement': 'La confidenza è l\'accordo del modello, non una probabilità di profitto. Leggi le invalidazioni prima di fare una proposta simulata.',
     'opps.mockBoard': 'Classifica MOCK',
+    'opps.rank.decision': 'Decisione',
+    'opps.rank.score': 'Punteggio Opportunità',
+    'opps.rank.finalScore': 'Punteggio Finale',
+    'opps.rank.sizeMult': 'Moltiplicatore Dim.',
+    'opps.rank.protection': 'Protezione',
+    'opps.rank.regime': 'Regime',
+    'opps.rank.reasons': 'Motivazioni',
+    'opps.fallbackNotice': 'Classificazione V7.2 fallita, si utilizza il feed opportunità di fallback.',
+
 
     // Asset
     'asset.eyebrow': 'Analisi asset',
@@ -124,6 +133,14 @@ const messages = {
     'asset.techBrain': 'Cervello tecnico',
     'asset.fundBrain': 'Cervello fondamentale',
     'asset.riskBrain': 'Cervello di rischio',
+    'asset.v72decision': 'Decisione Master V7.2 (PAPER)',
+    'asset.hardVeto': 'Veto Rigido',
+    'asset.softGuards': 'Guardie Soft',
+    'asset.weights': 'Pesi Cervelli',
+    'asset.brainScores': 'Punteggi',
+    'asset.rationale': 'Razionale',
+    'asset.sizeMultiplier': 'Moltiplicatore',
+
 
     // Portfolio
     'portfolio.eyebrow': 'Decidi / portafoglio simulato',
@@ -169,6 +186,11 @@ const messages = {
     'simulator.check1': 'Leggi il livello di invalidazione dell\'asset.',
     'simulator.check2': 'Conferma che il cervello del rischio non stia bloccando il setup.',
     'simulator.check3': 'Mantieni il nozionale entro la liquidità e il budget di perdita.',
+    'simulator.saving': 'Creazione in corso...',
+    'simulator.success': 'Proposta simulata V7.2 salvata con successo.',
+    'simulator.error': 'Errore nella valutazione o salvataggio della proposta.',
+    'simulator.rationaleLabel': 'Razionale',
+
 
     // News
     'news.eyebrow': 'Osserva / contesto',
@@ -281,6 +303,11 @@ const messages = {
     'history.sell': 'Vendita',
     'history.closed': 'Chiuso',
     'history.jun': 'Giu',
+    'history.loading': 'Caricamento cronologia...',
+    'history.empty': 'Nessuna operazione simulata trovata.',
+    'history.confidence': 'Confidenza',
+    'history.sizeMult': 'Molt. Dimensione',
+
 
     // System
     'system.eyebrow': 'Controlla / diagnostica',
@@ -307,6 +334,26 @@ const messages = {
     'system.unavailable': 'Non disponibile',
     'system.healthEndpoint': 'Endpoint di salute',
     'system.checking': 'Controllo in corso…',
+    'system.axiMode': 'Regole Axi & Modalità Protezione',
+    'system.stage': 'Stadio',
+    'system.protectionMode': 'Modalità Protezione',
+    'system.baseSizeMult': 'Molt. Dimensione Base',
+    'system.progReady': 'Pronto per Progressione',
+    'system.verifiedAt': 'Verificato il',
+    'system.version': 'Versione',
+    'system.weeklyCadence': 'Cadenza di verifica: Settimanale',
+    'system.preSeedRules': 'Regole PRE_SEED attuali',
+    'system.failedLoadRules': 'Impossibile caricare le regole',
+    'system.yes': 'Sì',
+    'system.no': 'No',
+    'system.minEquity': 'Equity Min',
+    'system.minEdgeScore': 'Edge Score Min',
+    'system.maxLossPct': 'Max Loss Pct',
+    'system.minDays': 'Giorni Min',
+    'system.minTrades': 'Trade Min',
+    'simulator.manualProposal': 'Proposta inserita manualmente',
+
+
     'broker.title': 'Bridge Axi / MetaTrader 5',
     'broker.ready': 'Pronto per la configurazione',
     'broker.disconnected': 'Bridge non collegato',
@@ -485,6 +532,15 @@ const messages = {
     'opps.avoid': 'AVOID',
     'opps.agreement': 'Confidence is model agreement, not a probability of profit. Read the invalidation before making a paper proposal.',
     'opps.mockBoard': 'MOCK board',
+    'opps.rank.decision': 'Decision',
+    'opps.rank.score': 'Opportunity Score',
+    'opps.rank.finalScore': 'Final Score',
+    'opps.rank.sizeMult': 'Size Mult.',
+    'opps.rank.protection': 'Protection',
+    'opps.rank.regime': 'Regime',
+    'opps.rank.reasons': 'Reasons',
+    'opps.fallbackNotice': 'V7.2 Ranking failed, falling back to opportunity feed.',
+
 
     // Asset
     'asset.eyebrow': 'Asset analysis',
@@ -505,6 +561,14 @@ const messages = {
     'asset.techBrain': 'Technical brain',
     'asset.fundBrain': 'Fundamental brain',
     'asset.riskBrain': 'Risk brain',
+    'asset.v72decision': 'V7.2 Master Decision (PAPER)',
+    'asset.hardVeto': 'Hard Veto',
+    'asset.softGuards': 'Soft Guards',
+    'asset.weights': 'Brain Weights',
+    'asset.brainScores': 'Scores',
+    'asset.rationale': 'Rationale',
+    'asset.sizeMultiplier': 'Multiplier',
+
 
     // Portfolio
     'portfolio.eyebrow': 'Decide / paper book',
@@ -550,6 +614,11 @@ const messages = {
     'simulator.check1': 'Read the asset invalidation level.',
     'simulator.check2': 'Confirm the risk brain is not blocking the setup.',
     'simulator.check3': 'Keep the notional inside your cash and loss budget.',
+    'simulator.saving': 'Creating proposal...',
+    'simulator.success': 'V7.2 simulated proposal saved successfully.',
+    'simulator.error': 'Error evaluating or saving the proposal.',
+    'simulator.rationaleLabel': 'Rationale',
+
 
     // News
     'news.eyebrow': 'Observe / context',
@@ -662,6 +731,11 @@ const messages = {
     'history.sell': 'Sell',
     'history.closed': 'Closed',
     'history.jun': 'Jun',
+    'history.loading': 'Loading history...',
+    'history.empty': 'No simulated operations found.',
+    'history.confidence': 'Confidence',
+    'history.sizeMult': 'Size Mult.',
+
 
     // System
     'system.eyebrow': 'Control / diagnostics',
@@ -688,6 +762,26 @@ const messages = {
     'system.unavailable': 'Unavailable',
     'system.healthEndpoint': 'Health endpoint',
     'system.checking': 'Checking…',
+    'system.axiMode': 'Axi Rules & Protection Mode',
+    'system.stage': 'Stage',
+    'system.protectionMode': 'Protection Mode',
+    'system.baseSizeMult': 'Base Size Mult.',
+    'system.progReady': 'Progression Ready',
+    'system.verifiedAt': 'Verified At',
+    'system.version': 'Version',
+    'system.weeklyCadence': 'Verification Cadence: Weekly',
+    'system.preSeedRules': 'Current PRE_SEED Rules',
+    'system.failedLoadRules': 'Failed to load rules',
+    'system.yes': 'Yes',
+    'system.no': 'No',
+    'system.minEquity': 'Min Equity',
+    'system.minEdgeScore': 'Min Edge Score',
+    'system.maxLossPct': 'Max Loss Pct',
+    'system.minDays': 'Min Days',
+    'system.minTrades': 'Min Trades',
+    'simulator.manualProposal': 'Manually entered proposal',
+
+
     'broker.title': 'Axi / MetaTrader 5 bridge',
     'broker.ready': 'Ready for configuration',
     'broker.disconnected': 'Bridge disconnected',

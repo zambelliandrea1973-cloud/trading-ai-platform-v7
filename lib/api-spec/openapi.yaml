@@ -236,6 +236,125 @@ paths:
         "400": { description: Invalid heartbeat }
         "401": { description: Missing or invalid bridge key }
         "403": { description: Bridge network is not allowlisted }
+  /decision/evaluate:
+    post:
+      operationId: evaluateDecision
+      tags: [trading]
+      summary: Evaluate a PAPER decision with the V7.1 master engine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MasterDecisionInput" }
+      responses:
+        "200":
+          description: Explainable master decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MasterDecisionResult" }
+        "400": { description: Invalid decision input }
+  /axi/rules:
+    get:
+      operationId: getAxiRules
+      tags: [trading]
+      summary: Get the latest verified Axi Select rules
+      responses:
+        "200":
+          description: Active Axi rules
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AxiRulesSnapshot" }
+  /axi/protection/evaluate:
+    post:
+      operationId: evaluateAxiProtection
+      tags: [trading]
+      summary: Evaluate PAPER sizing protection against Axi progress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AxiProgressInput" }
+      responses:
+        "200":
+          description: Axi protection state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AxiProtectionResult" }
+  /opportunities/rank:
+    post:
+      operationId: rankV72Opportunities
+      tags: [trading]
+      summary: Rank PAPER opportunities with the V7.2 engines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OpportunityRankingInput" }
+      responses:
+        "200":
+          description: V7.2 ranked opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RankedOpportunity" }
+  /decision-memory:
+    post:
+      operationId: createDecisionMemory
+      tags: [trading]
+      summary: Persist a PAPER decision for the signed-in user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecisionMemoryInput" }
+      responses:
+        "201":
+          description: Decision saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionMemory" }
+        "400": { description: Invalid decision memory input }
+  /decision-memory/recent:
+    get:
+      operationId: getRecentDecisionMemory
+      tags: [trading]
+      summary: List recent PAPER decisions for the signed-in user
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: number, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Recent decisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DecisionMemory" }
+  /decision-memory/{externalId}/outcome:
+    patch:
+      operationId: updateDecisionMemoryOutcome
+      tags: [trading]
+      summary: Close a signed-in user's PAPER decision
+      parameters:
+        - name: externalId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecisionMemoryOutcome" }
+      responses:
+        "200":
+          description: Decision outcome updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionMemory" }
+        "404": { description: Decision not found }
 components:
   responses:
     BrokerReadUnauthorized:
@@ -268,6 +387,225 @@ components:
       in: header
       name: x-broker-read-key
   schemas:
+    BrainSignal:
+      type: object
+      properties:
+        score: { type: ["number", "null"] }
+        confidence: { type: ["number", "null"] }
+    SafetyContext:
+      type: object
+      properties:
+        dailyLossPct: { type: ["number", "null"] }
+        drawdownPct: { type: ["number", "null"] }
+        consecutiveLosses: { type: ["number", "null"] }
+        volatilityShockMultiple: { type: ["number", "null"] }
+        spreadMultiple: { type: ["number", "null"] }
+        slippageMultiple: { type: ["number", "null"] }
+        dataHealth: { type: string, enum: [OK, DEGRADED, STALE, INVALID] }
+        brokerConnected: { type: ["boolean", "null"] }
+        portfolioCorrelation: { type: ["number", "null"] }
+        minutesToHighImpactEvent: { type: ["number", "null"] }
+        riskScore: { type: ["number", "null"] }
+    FundamentalInput:
+      type: object
+      required: [price]
+      properties:
+        price: { type: number }
+        epsTtm: { type: ["number", "null"] }
+        epsForward: { type: ["number", "null"] }
+        expectedEpsGrowthPct: { type: ["number", "null"] }
+        revenueGrowthPct: { type: ["number", "null"] }
+        operatingMarginPct: { type: ["number", "null"] }
+        roePct: { type: ["number", "null"] }
+        debtToEquity: { type: ["number", "null"] }
+        sectorPeMedian: { type: ["number", "null"] }
+    MasterDecisionInput:
+      type: object
+      required: [horizon, technical, macroNews]
+      properties:
+        horizon: { type: string, enum: [intraday, swing, position] }
+        technical: { $ref: "#/components/schemas/BrainSignal" }
+        macroNews: { $ref: "#/components/schemas/BrainSignal" }
+        fundamentals: { $ref: "#/components/schemas/FundamentalInput" }
+        statistical:
+          type: object
+          additionalProperties: true
+        safety: { $ref: "#/components/schemas/SafetyContext" }
+    MasterDecisionResult:
+      type: object
+      required: [confidence, decision, sizeMultiplier, hardVeto, hardVetoReasons, softGuards, weightsUsed, brainScores, rationale]
+      properties:
+        finalScore: { type: ["number", "null"] }
+        confidence: { type: number }
+        decision: { type: string, enum: [BUY, SELL, WAIT, NO_TRADE] }
+        sizeMultiplier: { type: number }
+        hardVeto: { type: boolean }
+        hardVetoReasons:
+          type: array
+          items: { type: string }
+        softGuards:
+          type: array
+          items: { type: string }
+        weightsUsed:
+          type: object
+          additionalProperties: { type: number }
+        brainScores:
+          type: object
+          additionalProperties: { type: ["number", "null"] }
+        fundamental:
+          type: ["object", "null"]
+          additionalProperties: true
+        statistical:
+          type: ["object", "null"]
+          additionalProperties: true
+        rationale: { type: string }
+    AxiStageRules:
+      type: object
+      required: [stage, minEquityUsd, minEdgeScore, maxLossPct]
+      properties:
+        stage: { type: string }
+        minEquityUsd: { type: number }
+        minEdgeScore: { type: number }
+        profitTargetPct: { type: ["number", "null"] }
+        minDays: { type: ["number", "null"] }
+        minTrades: { type: ["number", "null"] }
+        maxLossPct: { type: number }
+        leverage: { type: ["number", "null"] }
+    AxiRulesSnapshot:
+      type: object
+      required: [version, verifiedAt, sources, stages]
+      properties:
+        version: { type: string }
+        verifiedAt: { type: string, format: date-time }
+        sources:
+          type: array
+          items: { type: string }
+        stages:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AxiStageRules" }
+    AxiProgressInput:
+      type: object
+      required: [stage]
+      properties:
+        stage: { type: string, enum: [PRE_SEED, SEED, INCUBATION, ACCELERATION, PRO, PRO_500, PRO_M] }
+        allocationStartBalance: { type: ["number", "null"] }
+        allocationEquity: { type: ["number", "null"] }
+        accountEquityUsd: { type: ["number", "null"] }
+        edgeScore: { type: ["number", "null"] }
+        closedTrades: { type: ["number", "null"] }
+        stageDays: { type: ["number", "null"] }
+        monthStartEquity: { type: ["number", "null"] }
+        currentEquity: { type: ["number", "null"] }
+        peakMonthlyProfitPct: { type: ["number", "null"] }
+    AxiProtectionResult:
+      type: object
+      required: [mode, baseSizeMultiplier, targetReached, progressionReady, rules, reasons]
+      properties:
+        mode: { type: string, enum: [NORMAL, PROFIT_LOCK_ACTIVE, RECOVERY, CAPITAL_PRESERVATION] }
+        baseSizeMultiplier: { type: number }
+        monthlyProfitPct: { type: ["number", "null"] }
+        stageProfitPct: { type: ["number", "null"] }
+        targetReached: { type: boolean }
+        tradesReached: { type: boolean }
+        daysReached: { type: boolean }
+        edgeReached: { type: boolean }
+        equityReached: { type: boolean }
+        progressionReady: { type: boolean }
+        rules: { $ref: "#/components/schemas/AxiStageRules" }
+        reasons:
+          type: array
+          items: { type: string }
+    OpportunityCandidate:
+      type: object
+      required: [symbol, masterInput]
+      properties:
+        symbol: { type: string }
+        expectedReturnR: { type: ["number", "null"] }
+        expectedRiskR: { type: ["number", "null"] }
+        confidence: { type: ["number", "null"] }
+        liquidityScore: { type: ["number", "null"] }
+        executionCostR: { type: ["number", "null"] }
+        portfolioCorrelation: { type: ["number", "null"] }
+        sectorConcentrationPct: { type: ["number", "null"] }
+        masterInput: { $ref: "#/components/schemas/MasterDecisionInput" }
+    OpportunityRankingInput:
+      type: object
+      required: [candidates, axi, crash]
+      properties:
+        candidates:
+          type: array
+          items: { $ref: "#/components/schemas/OpportunityCandidate" }
+        axi: { $ref: "#/components/schemas/AxiProgressInput" }
+        crash:
+          type: object
+          additionalProperties: true
+    RankedOpportunity:
+      type: object
+      required: [symbol, decision, opportunityScore, sizeMultiplier, protectionMode, marketRegime, reasons]
+      properties:
+        symbol: { type: string }
+        decision: { type: string, enum: [BUY, SELL, WAIT, NO_TRADE] }
+        finalScore: { type: ["number", "null"] }
+        opportunityScore: { type: number }
+        expectancyR: { type: ["number", "null"] }
+        sizeMultiplier: { type: number }
+        protectionMode: { type: string }
+        marketRegime: { type: string }
+        reasons:
+          type: array
+          items: { type: string }
+    DecisionMemoryInput:
+      type: object
+      required: [externalId, symbol, algorithmVersion, regime, decision, confidence, sizeMultiplier, rationale]
+      properties:
+        externalId: { type: string }
+        symbol: { type: string }
+        algorithmVersion: { type: string }
+        regime: { type: string }
+        decision: { type: string }
+        finalScore: { type: ["number", "null"] }
+        confidence: { type: number }
+        sizeMultiplier: { type: number }
+        rationale: { type: string }
+        brainSnapshot:
+          type: object
+          additionalProperties: true
+        marketSnapshot:
+          type: object
+          additionalProperties: true
+    DecisionMemoryOutcome:
+      type: object
+      properties:
+        outcomeR: { type: ["number", "null"] }
+        maxAdverseExcursionR: { type: ["number", "null"] }
+        maxFavourableExcursionR: { type: ["number", "null"] }
+        exitReason: { type: ["string", "null"] }
+    DecisionMemory:
+      type: object
+      required: [id, externalId, symbol, algorithmVersion, regime, decision, confidence, sizeMultiplier, rationale, createdAt]
+      properties:
+        id: { type: number }
+        externalId: { type: string }
+        symbol: { type: string }
+        algorithmVersion: { type: string }
+        regime: { type: string }
+        decision: { type: string }
+        finalScore: { type: ["string", "null"] }
+        confidence: { type: string }
+        sizeMultiplier: { type: string }
+        rationale: { type: string }
+        brainSnapshot:
+          type: object
+          additionalProperties: true
+        marketSnapshot:
+          type: object
+          additionalProperties: true
+        outcomeR: { type: ["string", "null"] }
+        maxAdverseExcursionR: { type: ["string", "null"] }
+        maxFavourableExcursionR: { type: ["string", "null"] }
+        exitReason: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        closedAt: { type: ["string", "null"], format: date-time }
     HealthStatus:
       type: object
       properties:

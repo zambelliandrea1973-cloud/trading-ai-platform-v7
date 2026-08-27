@@ -389,3 +389,308 @@ export const SubmitMt5HeartbeatBody = zod.object({
 export const SubmitMt5HeartbeatResponse = zod.void()
 
 
+/**
+ * @summary Evaluate a PAPER decision with the V7.1 master engine
+ */
+export const EvaluateDecisionBody = zod.object({
+  "horizon": zod.enum(['intraday', 'swing', 'position']),
+  "technical": zod.object({
+  "score": zod.number().nullish(),
+  "confidence": zod.number().nullish()
+}),
+  "macroNews": zod.object({
+  "score": zod.number().nullish(),
+  "confidence": zod.number().nullish()
+}),
+  "fundamentals": zod.object({
+  "price": zod.number(),
+  "epsTtm": zod.number().nullish(),
+  "epsForward": zod.number().nullish(),
+  "expectedEpsGrowthPct": zod.number().nullish(),
+  "revenueGrowthPct": zod.number().nullish(),
+  "operatingMarginPct": zod.number().nullish(),
+  "roePct": zod.number().nullish(),
+  "debtToEquity": zod.number().nullish(),
+  "sectorPeMedian": zod.number().nullish()
+}).optional(),
+  "statistical": zod.record(zod.string(), zod.unknown()).optional(),
+  "safety": zod.object({
+  "dailyLossPct": zod.number().nullish(),
+  "drawdownPct": zod.number().nullish(),
+  "consecutiveLosses": zod.number().nullish(),
+  "volatilityShockMultiple": zod.number().nullish(),
+  "spreadMultiple": zod.number().nullish(),
+  "slippageMultiple": zod.number().nullish(),
+  "dataHealth": zod.enum(['OK', 'DEGRADED', 'STALE', 'INVALID']).optional(),
+  "brokerConnected": zod.boolean().nullish(),
+  "portfolioCorrelation": zod.number().nullish(),
+  "minutesToHighImpactEvent": zod.number().nullish(),
+  "riskScore": zod.number().nullish()
+}).optional()
+})
+
+export const EvaluateDecisionResponse = zod.object({
+  "finalScore": zod.number().nullish(),
+  "confidence": zod.number(),
+  "decision": zod.enum(['BUY', 'SELL', 'WAIT', 'NO_TRADE']),
+  "sizeMultiplier": zod.number(),
+  "hardVeto": zod.boolean(),
+  "hardVetoReasons": zod.array(zod.string()),
+  "softGuards": zod.array(zod.string()),
+  "weightsUsed": zod.record(zod.string(), zod.number()),
+  "brainScores": zod.record(zod.string(), zod.number().nullable()),
+  "fundamental": zod.record(zod.string(), zod.unknown()).nullish(),
+  "statistical": zod.record(zod.string(), zod.unknown()).nullish(),
+  "rationale": zod.string()
+})
+
+
+/**
+ * @summary Get the latest verified Axi Select rules
+ */
+export const GetAxiRulesResponse = zod.object({
+  "version": zod.string(),
+  "verifiedAt": zod.coerce.date(),
+  "sources": zod.array(zod.string()),
+  "stages": zod.record(zod.string(), zod.object({
+  "stage": zod.string(),
+  "minEquityUsd": zod.number(),
+  "minEdgeScore": zod.number(),
+  "profitTargetPct": zod.number().nullish(),
+  "minDays": zod.number().nullish(),
+  "minTrades": zod.number().nullish(),
+  "maxLossPct": zod.number(),
+  "leverage": zod.number().nullish()
+}))
+})
+
+
+/**
+ * @summary Evaluate PAPER sizing protection against Axi progress
+ */
+export const EvaluateAxiProtectionBody = zod.object({
+  "stage": zod.enum(['PRE_SEED', 'SEED', 'INCUBATION', 'ACCELERATION', 'PRO', 'PRO_500', 'PRO_M']),
+  "allocationStartBalance": zod.number().nullish(),
+  "allocationEquity": zod.number().nullish(),
+  "accountEquityUsd": zod.number().nullish(),
+  "edgeScore": zod.number().nullish(),
+  "closedTrades": zod.number().nullish(),
+  "stageDays": zod.number().nullish(),
+  "monthStartEquity": zod.number().nullish(),
+  "currentEquity": zod.number().nullish(),
+  "peakMonthlyProfitPct": zod.number().nullish()
+})
+
+export const EvaluateAxiProtectionResponse = zod.object({
+  "mode": zod.enum(['NORMAL', 'PROFIT_LOCK_ACTIVE', 'RECOVERY', 'CAPITAL_PRESERVATION']),
+  "baseSizeMultiplier": zod.number(),
+  "monthlyProfitPct": zod.number().nullish(),
+  "stageProfitPct": zod.number().nullish(),
+  "targetReached": zod.boolean(),
+  "tradesReached": zod.boolean().optional(),
+  "daysReached": zod.boolean().optional(),
+  "edgeReached": zod.boolean().optional(),
+  "equityReached": zod.boolean().optional(),
+  "progressionReady": zod.boolean(),
+  "rules": zod.object({
+  "stage": zod.string(),
+  "minEquityUsd": zod.number(),
+  "minEdgeScore": zod.number(),
+  "profitTargetPct": zod.number().nullish(),
+  "minDays": zod.number().nullish(),
+  "minTrades": zod.number().nullish(),
+  "maxLossPct": zod.number(),
+  "leverage": zod.number().nullish()
+}),
+  "reasons": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Rank PAPER opportunities with the V7.2 engines
+ */
+export const RankV72OpportunitiesBody = zod.object({
+  "candidates": zod.array(zod.object({
+  "symbol": zod.string(),
+  "expectedReturnR": zod.number().nullish(),
+  "expectedRiskR": zod.number().nullish(),
+  "confidence": zod.number().nullish(),
+  "liquidityScore": zod.number().nullish(),
+  "executionCostR": zod.number().nullish(),
+  "portfolioCorrelation": zod.number().nullish(),
+  "sectorConcentrationPct": zod.number().nullish(),
+  "masterInput": zod.object({
+  "horizon": zod.enum(['intraday', 'swing', 'position']),
+  "technical": zod.object({
+  "score": zod.number().nullish(),
+  "confidence": zod.number().nullish()
+}),
+  "macroNews": zod.object({
+  "score": zod.number().nullish(),
+  "confidence": zod.number().nullish()
+}),
+  "fundamentals": zod.object({
+  "price": zod.number(),
+  "epsTtm": zod.number().nullish(),
+  "epsForward": zod.number().nullish(),
+  "expectedEpsGrowthPct": zod.number().nullish(),
+  "revenueGrowthPct": zod.number().nullish(),
+  "operatingMarginPct": zod.number().nullish(),
+  "roePct": zod.number().nullish(),
+  "debtToEquity": zod.number().nullish(),
+  "sectorPeMedian": zod.number().nullish()
+}).optional(),
+  "statistical": zod.record(zod.string(), zod.unknown()).optional(),
+  "safety": zod.object({
+  "dailyLossPct": zod.number().nullish(),
+  "drawdownPct": zod.number().nullish(),
+  "consecutiveLosses": zod.number().nullish(),
+  "volatilityShockMultiple": zod.number().nullish(),
+  "spreadMultiple": zod.number().nullish(),
+  "slippageMultiple": zod.number().nullish(),
+  "dataHealth": zod.enum(['OK', 'DEGRADED', 'STALE', 'INVALID']).optional(),
+  "brokerConnected": zod.boolean().nullish(),
+  "portfolioCorrelation": zod.number().nullish(),
+  "minutesToHighImpactEvent": zod.number().nullish(),
+  "riskScore": zod.number().nullish()
+}).optional()
+})
+})),
+  "axi": zod.object({
+  "stage": zod.enum(['PRE_SEED', 'SEED', 'INCUBATION', 'ACCELERATION', 'PRO', 'PRO_500', 'PRO_M']),
+  "allocationStartBalance": zod.number().nullish(),
+  "allocationEquity": zod.number().nullish(),
+  "accountEquityUsd": zod.number().nullish(),
+  "edgeScore": zod.number().nullish(),
+  "closedTrades": zod.number().nullish(),
+  "stageDays": zod.number().nullish(),
+  "monthStartEquity": zod.number().nullish(),
+  "currentEquity": zod.number().nullish(),
+  "peakMonthlyProfitPct": zod.number().nullish()
+}),
+  "crash": zod.record(zod.string(), zod.unknown())
+})
+
+export const RankV72OpportunitiesResponseItem = zod.object({
+  "symbol": zod.string(),
+  "decision": zod.enum(['BUY', 'SELL', 'WAIT', 'NO_TRADE']),
+  "finalScore": zod.number().nullish(),
+  "opportunityScore": zod.number(),
+  "expectancyR": zod.number().nullish(),
+  "sizeMultiplier": zod.number(),
+  "protectionMode": zod.string(),
+  "marketRegime": zod.string(),
+  "reasons": zod.array(zod.string())
+})
+export const RankV72OpportunitiesResponse = zod.array(RankV72OpportunitiesResponseItem)
+
+
+/**
+ * @summary Persist a PAPER decision for the signed-in user
+ */
+export const CreateDecisionMemoryBody = zod.object({
+  "externalId": zod.string(),
+  "symbol": zod.string(),
+  "algorithmVersion": zod.string(),
+  "regime": zod.string(),
+  "decision": zod.string(),
+  "finalScore": zod.number().nullish(),
+  "confidence": zod.number(),
+  "sizeMultiplier": zod.number(),
+  "rationale": zod.string(),
+  "brainSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketSnapshot": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CreateDecisionMemoryResponse = zod.object({
+  "id": zod.number(),
+  "externalId": zod.string(),
+  "symbol": zod.string(),
+  "algorithmVersion": zod.string(),
+  "regime": zod.string(),
+  "decision": zod.string(),
+  "finalScore": zod.string().nullish(),
+  "confidence": zod.string(),
+  "sizeMultiplier": zod.string(),
+  "rationale": zod.string(),
+  "brainSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "outcomeR": zod.string().nullish(),
+  "maxAdverseExcursionR": zod.string().nullish(),
+  "maxFavourableExcursionR": zod.string().nullish(),
+  "exitReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "closedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary List recent PAPER decisions for the signed-in user
+ */
+export const getRecentDecisionMemoryQueryLimitMax = 200;
+
+
+
+export const GetRecentDecisionMemoryQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(getRecentDecisionMemoryQueryLimitMax).optional()
+})
+
+export const GetRecentDecisionMemoryResponseItem = zod.object({
+  "id": zod.number(),
+  "externalId": zod.string(),
+  "symbol": zod.string(),
+  "algorithmVersion": zod.string(),
+  "regime": zod.string(),
+  "decision": zod.string(),
+  "finalScore": zod.string().nullish(),
+  "confidence": zod.string(),
+  "sizeMultiplier": zod.string(),
+  "rationale": zod.string(),
+  "brainSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "outcomeR": zod.string().nullish(),
+  "maxAdverseExcursionR": zod.string().nullish(),
+  "maxFavourableExcursionR": zod.string().nullish(),
+  "exitReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "closedAt": zod.coerce.date().nullish()
+})
+export const GetRecentDecisionMemoryResponse = zod.array(GetRecentDecisionMemoryResponseItem)
+
+
+/**
+ * @summary Close a signed-in user's PAPER decision
+ */
+export const UpdateDecisionMemoryOutcomeParams = zod.object({
+  "externalId": zod.coerce.string()
+})
+
+export const UpdateDecisionMemoryOutcomeBody = zod.object({
+  "outcomeR": zod.number().nullish(),
+  "maxAdverseExcursionR": zod.number().nullish(),
+  "maxFavourableExcursionR": zod.number().nullish(),
+  "exitReason": zod.string().nullish()
+})
+
+export const UpdateDecisionMemoryOutcomeResponse = zod.object({
+  "id": zod.number(),
+  "externalId": zod.string(),
+  "symbol": zod.string(),
+  "algorithmVersion": zod.string(),
+  "regime": zod.string(),
+  "decision": zod.string(),
+  "finalScore": zod.string().nullish(),
+  "confidence": zod.string(),
+  "sizeMultiplier": zod.string(),
+  "rationale": zod.string(),
+  "brainSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "outcomeR": zod.string().nullish(),
+  "maxAdverseExcursionR": zod.string().nullish(),
+  "maxFavourableExcursionR": zod.string().nullish(),
+  "exitReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "closedAt": zod.coerce.date().nullish()
+})
+
+
