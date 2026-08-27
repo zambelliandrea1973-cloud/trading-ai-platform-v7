@@ -6,13 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface DecisionMemoryOutcome {
-  /** @nullable */
+export interface DecisionMemoryOutcomeInput {
   outcomeR?: number | null;
-  /** @nullable */
   maxAdverseExcursionR?: number | null;
-  /** @nullable */
   maxFavourableExcursionR?: number | null;
-  /** @nullable */
   exitReason?: string | null;
 }

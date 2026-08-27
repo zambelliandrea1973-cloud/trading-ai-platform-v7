@@ -14,11 +14,10 @@ export interface DecisionMemoryInput {
   algorithmVersion: string;
   regime: string;
   decision: string;
-  /** @nullable */
   finalScore?: number | null;
   confidence: number;
   sizeMultiplier: number;
   rationale: string;
-  brainSnapshot?: DecisionMemoryInputBrainSnapshot;
-  marketSnapshot?: DecisionMemoryInputMarketSnapshot;
+  brainSnapshot: DecisionMemoryInputBrainSnapshot;
+  marketSnapshot: DecisionMemoryInputMarketSnapshot;
 }

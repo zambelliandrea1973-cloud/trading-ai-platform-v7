@@ -14,6 +14,8 @@ tags:
     description: Paper trading dashboard data
   - name: broker
     description: Broker and MT5 bridge readiness
+  - name: v72
+    description: V7.2 decision engine, Axi protection, and decision memory
 paths:
   /healthz:
     get:
@@ -125,6 +127,103 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /axi/rules:
+    get:
+      operationId: getAxiRules
+      tags: [v72]
+      summary: Get the active Axi stage rules
+      responses:
+        "200":
+          description: Active Axi rules
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AxiRulesSnapshot" }
+  /axi/progress:
+    get:
+      operationId: getAxiProgress
+      tags: [v72]
+      summary: Get the current PAPER Axi progression state
+      responses:
+        "200":
+          description: Axi PAPER progression and protection state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AxiProgressResult" }
+  /v72/opportunities-style:
+    get:
+      operationId: getV72Opportunities
+      tags: [v72]
+      summary: Get V7.2 ranked paper opportunities
+      parameters:
+        - name: locale
+          in: query
+          required: false
+          schema: { type: string, enum: [it, en] }
+      responses:
+        "200":
+          description: Opportunities ranked by the V7.2 engine
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RankedOpportunity" }
+  /decision-memory:
+    post:
+      operationId: createDecisionMemory
+      tags: [v72]
+      summary: Persist a PAPER decision proposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecisionMemoryInput" }
+      responses:
+        "201":
+          description: Persisted decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionMemory" }
+        "400": { description: Invalid decision memory input }
+  /decision-memory/{externalId}/outcome:
+    patch:
+      operationId: updateDecisionMemoryOutcome
+      tags: [v72]
+      summary: Record the outcome of a PAPER decision
+      parameters:
+        - name: externalId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecisionMemoryOutcomeInput" }
+      responses:
+        "200":
+          description: Updated decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionMemory" }
+        "404": { description: Decision memory record not found }
+  /decision-memory/recent:
+    get:
+      operationId: getRecentDecisionMemory
+      tags: [v72]
+      summary: List recent PAPER decisions
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: number, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Recent decisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DecisionMemory" }
   /broker/status:
     get:
       operationId: getBrokerStatus
@@ -253,17 +352,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MasterDecisionResult" }
         "400": { description: Invalid decision input }
-  /axi/rules:
-    get:
-      operationId: getAxiRules
-      tags: [trading]
-      summary: Get the latest verified Axi Select rules
-      responses:
-        "200":
-          description: Active Axi rules
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/AxiRulesSnapshot" }
   /axi/protection/evaluate:
     post:
       operationId: evaluateAxiProtection
@@ -298,63 +386,6 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/RankedOpportunity" }
-  /decision-memory:
-    post:
-      operationId: createDecisionMemory
-      tags: [trading]
-      summary: Persist a PAPER decision for the signed-in user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/DecisionMemoryInput" }
-      responses:
-        "201":
-          description: Decision saved
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/DecisionMemory" }
-        "400": { description: Invalid decision memory input }
-  /decision-memory/recent:
-    get:
-      operationId: getRecentDecisionMemory
-      tags: [trading]
-      summary: List recent PAPER decisions for the signed-in user
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema: { type: number, minimum: 1, maximum: 200 }
-      responses:
-        "200":
-          description: Recent decisions
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/DecisionMemory" }
-  /decision-memory/{externalId}/outcome:
-    patch:
-      operationId: updateDecisionMemoryOutcome
-      tags: [trading]
-      summary: Close a signed-in user's PAPER decision
-      parameters:
-        - name: externalId
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/DecisionMemoryOutcome" }
-      responses:
-        "200":
-          description: Decision outcome updated
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/DecisionMemory" }
-        "404": { description: Decision not found }
 components:
   responses:
     BrokerReadUnauthorized:
@@ -459,30 +490,6 @@ components:
           type: ["object", "null"]
           additionalProperties: true
         rationale: { type: string }
-    AxiStageRules:
-      type: object
-      required: [stage, minEquityUsd, minEdgeScore, maxLossPct]
-      properties:
-        stage: { type: string }
-        minEquityUsd: { type: number }
-        minEdgeScore: { type: number }
-        profitTargetPct: { type: ["number", "null"] }
-        minDays: { type: ["number", "null"] }
-        minTrades: { type: ["number", "null"] }
-        maxLossPct: { type: number }
-        leverage: { type: ["number", "null"] }
-    AxiRulesSnapshot:
-      type: object
-      required: [version, verifiedAt, sources, stages]
-      properties:
-        version: { type: string }
-        verifiedAt: { type: string, format: date-time }
-        sources:
-          type: array
-          items: { type: string }
-        stages:
-          type: object
-          additionalProperties: { $ref: "#/components/schemas/AxiStageRules" }
     AxiProgressInput:
       type: object
       required: [stage]
@@ -539,73 +546,6 @@ components:
         crash:
           type: object
           additionalProperties: true
-    RankedOpportunity:
-      type: object
-      required: [symbol, decision, opportunityScore, sizeMultiplier, protectionMode, marketRegime, reasons]
-      properties:
-        symbol: { type: string }
-        decision: { type: string, enum: [BUY, SELL, WAIT, NO_TRADE] }
-        finalScore: { type: ["number", "null"] }
-        opportunityScore: { type: number }
-        expectancyR: { type: ["number", "null"] }
-        sizeMultiplier: { type: number }
-        protectionMode: { type: string }
-        marketRegime: { type: string }
-        reasons:
-          type: array
-          items: { type: string }
-    DecisionMemoryInput:
-      type: object
-      required: [externalId, symbol, algorithmVersion, regime, decision, confidence, sizeMultiplier, rationale]
-      properties:
-        externalId: { type: string }
-        symbol: { type: string }
-        algorithmVersion: { type: string }
-        regime: { type: string }
-        decision: { type: string }
-        finalScore: { type: ["number", "null"] }
-        confidence: { type: number }
-        sizeMultiplier: { type: number }
-        rationale: { type: string }
-        brainSnapshot:
-          type: object
-          additionalProperties: true
-        marketSnapshot:
-          type: object
-          additionalProperties: true
-    DecisionMemoryOutcome:
-      type: object
-      properties:
-        outcomeR: { type: ["number", "null"] }
-        maxAdverseExcursionR: { type: ["number", "null"] }
-        maxFavourableExcursionR: { type: ["number", "null"] }
-        exitReason: { type: ["string", "null"] }
-    DecisionMemory:
-      type: object
-      required: [id, externalId, symbol, algorithmVersion, regime, decision, confidence, sizeMultiplier, rationale, createdAt]
-      properties:
-        id: { type: number }
-        externalId: { type: string }
-        symbol: { type: string }
-        algorithmVersion: { type: string }
-        regime: { type: string }
-        decision: { type: string }
-        finalScore: { type: ["string", "null"] }
-        confidence: { type: string }
-        sizeMultiplier: { type: string }
-        rationale: { type: string }
-        brainSnapshot:
-          type: object
-          additionalProperties: true
-        marketSnapshot:
-          type: object
-          additionalProperties: true
-        outcomeR: { type: ["string", "null"] }
-        maxAdverseExcursionR: { type: ["string", "null"] }
-        maxFavourableExcursionR: { type: ["string", "null"] }
-        exitReason: { type: ["string", "null"] }
-        createdAt: { type: string, format: date-time }
-        closedAt: { type: ["string", "null"], format: date-time }
     HealthStatus:
       type: object
       properties:
@@ -693,7 +633,167 @@ components:
         newsDuplicates:
           type: array
           items: { $ref: "#/components/schemas/NewsDuplicate" }
-      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation, news, historicalPrecedents, thesis, riskLimits, dataStatus, newsSourceStatus, newsSourceLabel, newsSources, newsSourceCoverage, newsConflicts, newsDuplicates]
+        masterDecision:
+          $ref: "#/components/schemas/MasterDecisionSummary"
+        fundamentalBrain:
+          $ref: "#/components/schemas/FundamentalBrainResult"
+      required: [symbol, name, price, decision, confidence, riskLevel, regime, explanation, technical, fundamental, risk, indicators, invalidation, news, historicalPrecedents, thesis, riskLimits, dataStatus, newsSourceStatus, newsSourceLabel, newsSources, newsSourceCoverage, newsConflicts, newsDuplicates, masterDecision, fundamentalBrain]
+    FundamentalMetric:
+      type: object
+      properties:
+        value: { type: number, nullable: true }
+        score: { type: number, nullable: true }
+        label: { type: string, enum: [attractive, fair, expensive, strong, neutral, weak, unavailable] }
+      required: [value, score, label]
+    FundamentalBrainResult:
+      type: object
+      properties:
+        score: { type: number, nullable: true }
+        confidence: { type: number }
+        direction: { type: string, enum: [BUY, NEUTRAL, CAUTION, UNAVAILABLE] }
+        metrics:
+          type: object
+          properties:
+            pe: { $ref: "#/components/schemas/FundamentalMetric" }
+            forwardPe: { $ref: "#/components/schemas/FundamentalMetric" }
+            peg: { $ref: "#/components/schemas/FundamentalMetric" }
+            epsGrowth: { $ref: "#/components/schemas/FundamentalMetric" }
+            revenueGrowth: { $ref: "#/components/schemas/FundamentalMetric" }
+            operatingMargin: { $ref: "#/components/schemas/FundamentalMetric" }
+            roe: { $ref: "#/components/schemas/FundamentalMetric" }
+            debtToEquity: { $ref: "#/components/schemas/FundamentalMetric" }
+          required: [pe, forwardPe, peg, epsGrowth, revenueGrowth, operatingMargin, roe, debtToEquity]
+        rationale: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+      required: [score, confidence, direction, metrics, rationale, warnings]
+    MasterDecisionSummary:
+      type: object
+      properties:
+        finalScore: { type: number, nullable: true }
+        confidence: { type: number }
+        decision: { type: string, enum: [BUY, SELL, WAIT, NO_TRADE] }
+        sizeMultiplier: { type: number }
+        hardVeto: { type: boolean }
+        hardVetoReasons:
+          type: array
+          items: { type: string }
+        softGuards:
+          type: array
+          items: { type: string }
+        weightsUsed:
+          type: object
+          additionalProperties: { type: number }
+        brainScores:
+          type: object
+          additionalProperties: { type: number, nullable: true }
+        rationale: { type: string }
+      required: [finalScore, confidence, decision, sizeMultiplier, hardVeto, hardVetoReasons, softGuards, weightsUsed, brainScores, rationale]
+    AxiStageRules:
+      type: object
+      properties:
+        stage: { type: string, enum: [PRE_SEED, SEED, INCUBATION, ACCELERATION, PRO, PRO_500, PRO_M] }
+        minEquityUsd: { type: number }
+        minEdgeScore: { type: number }
+        profitTargetPct: { type: number, nullable: true }
+        minDays: { type: number, nullable: true }
+        minTrades: { type: number, nullable: true }
+        maxLossPct: { type: number }
+        leverage: { type: number, nullable: true }
+      required: [stage, minEquityUsd, minEdgeScore, profitTargetPct, minDays, minTrades, maxLossPct, leverage]
+    AxiRulesSnapshot:
+      type: object
+      properties:
+        version: { type: string }
+        verifiedAt: { type: string, format: date-time }
+        sources:
+          type: array
+          items: { type: string }
+        stages:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AxiStageRules" }
+      required: [version, verifiedAt, sources, stages]
+    AxiProgressResult:
+      type: object
+      properties:
+        stage: { type: string }
+        protectionMode: { type: string, enum: [NORMAL, PROFIT_LOCK_ACTIVE, RECOVERY, CAPITAL_PRESERVATION] }
+        marketRegime: { type: string, enum: [GROWTH, BALANCED, DEFENSIVE, CRISIS] }
+        edgeScore: { type: number, nullable: true }
+        closedTrades: { type: number, nullable: true }
+        stageDays: { type: number, nullable: true }
+        currentEquity: { type: number, nullable: true }
+        allocationEquity: { type: number, nullable: true }
+        monthlyProfitPct: { type: number, nullable: true }
+        stageProfitPct: { type: number, nullable: true }
+        progressionReady: { type: boolean }
+        baseSizeMultiplier: { type: number }
+        reasons:
+          type: array
+          items: { type: string }
+        rules: { $ref: "#/components/schemas/AxiStageRules" }
+      required: [stage, protectionMode, marketRegime, edgeScore, closedTrades, stageDays, currentEquity, allocationEquity, monthlyProfitPct, stageProfitPct, progressionReady, baseSizeMultiplier, reasons, rules]
+    RankedOpportunity:
+      type: object
+      properties:
+        symbol: { type: string }
+        decision: { type: string, enum: [BUY, SELL, WAIT, NO_TRADE] }
+        finalScore: { type: number, nullable: true }
+        opportunityScore: { type: number }
+        expectancyR: { type: number, nullable: true }
+        sizeMultiplier: { type: number }
+        protectionMode: { type: string, enum: [NORMAL, PROFIT_LOCK_ACTIVE, RECOVERY, CAPITAL_PRESERVATION] }
+        marketRegime: { type: string, enum: [GROWTH, BALANCED, DEFENSIVE, CRISIS] }
+        reasons:
+          type: array
+          items: { type: string }
+      required: [symbol, decision, finalScore, opportunityScore, expectancyR, sizeMultiplier, protectionMode, marketRegime, reasons]
+    DecisionMemory:
+      type: object
+      properties:
+        id: { type: number }
+        externalId: { type: string }
+        symbol: { type: string }
+        algorithmVersion: { type: string }
+        regime: { type: string }
+        decision: { type: string }
+        finalScore: { type: number, nullable: true }
+        confidence: { type: number }
+        sizeMultiplier: { type: number }
+        rationale: { type: string }
+        brainSnapshot: { type: object, additionalProperties: true }
+        marketSnapshot: { type: object, additionalProperties: true }
+        outcomeR: { type: number, nullable: true }
+        maxAdverseExcursionR: { type: number, nullable: true }
+        maxFavourableExcursionR: { type: number, nullable: true }
+        exitReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time, nullable: true }
+      required: [id, externalId, symbol, algorithmVersion, regime, decision, finalScore, confidence, sizeMultiplier, rationale, brainSnapshot, marketSnapshot, outcomeR, maxAdverseExcursionR, maxFavourableExcursionR, exitReason, createdAt, closedAt]
+    DecisionMemoryInput:
+      type: object
+      properties:
+        externalId: { type: string }
+        symbol: { type: string }
+        algorithmVersion: { type: string }
+        regime: { type: string }
+        decision: { type: string }
+        finalScore: { type: number, nullable: true }
+        confidence: { type: number }
+        sizeMultiplier: { type: number }
+        rationale: { type: string }
+        brainSnapshot: { type: object, additionalProperties: true }
+        marketSnapshot: { type: object, additionalProperties: true }
+      required: [externalId, symbol, algorithmVersion, regime, decision, confidence, sizeMultiplier, rationale, brainSnapshot, marketSnapshot]
+    DecisionMemoryOutcomeInput:
+      type: object
+      properties:
+        outcomeR: { type: number, nullable: true }
+        maxAdverseExcursionR: { type: number, nullable: true }
+        maxFavourableExcursionR: { type: number, nullable: true }
+        exitReason: { type: string, nullable: true }
+      required: []
     NewsFeed:
       type: object
       properties:
@@ -954,4 +1054,3 @@ components:
         status: { type: string, enum: [healthy, degraded] }
         heartbeatAt: { type: string, format: date-time }
       required: [status, heartbeatAt]
-

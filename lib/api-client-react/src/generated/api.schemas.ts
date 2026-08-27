@@ -128,30 +128,6 @@ export interface MasterDecisionResult {
   rationale: string;
 }
 
-export interface AxiStageRules {
-  stage: string;
-  minEquityUsd: number;
-  minEdgeScore: number;
-  /** @nullable */
-  profitTargetPct?: number | null;
-  /** @nullable */
-  minDays?: number | null;
-  /** @nullable */
-  minTrades?: number | null;
-  maxLossPct: number;
-  /** @nullable */
-  leverage?: number | null;
-}
-
-export type AxiRulesSnapshotStages = {[key: string]: AxiStageRules};
-
-export interface AxiRulesSnapshot {
-  version: string;
-  verifiedAt: string;
-  sources: string[];
-  stages: AxiRulesSnapshotStages;
-}
-
 export type AxiProgressInputStage = typeof AxiProgressInputStage[keyof typeof AxiProgressInputStage];
 
 
@@ -197,6 +173,30 @@ export const AxiProtectionResultMode = {
   CAPITAL_PRESERVATION: 'CAPITAL_PRESERVATION',
 } as const;
 
+export type AxiStageRulesStage = typeof AxiStageRulesStage[keyof typeof AxiStageRulesStage];
+
+
+export const AxiStageRulesStage = {
+  PRE_SEED: 'PRE_SEED',
+  SEED: 'SEED',
+  INCUBATION: 'INCUBATION',
+  ACCELERATION: 'ACCELERATION',
+  PRO: 'PRO',
+  PRO_500: 'PRO_500',
+  PRO_M: 'PRO_M',
+} as const;
+
+export interface AxiStageRules {
+  stage: AxiStageRulesStage;
+  minEquityUsd: number;
+  minEdgeScore: number;
+  profitTargetPct: number | null;
+  minDays: number | null;
+  minTrades: number | null;
+  maxLossPct: number;
+  leverage: number | null;
+}
+
 export interface AxiProtectionResult {
   mode: AxiProtectionResultMode;
   baseSizeMultiplier: number;
@@ -239,91 +239,6 @@ export interface OpportunityRankingInput {
   candidates: OpportunityCandidate[];
   axi: AxiProgressInput;
   crash: OpportunityRankingInputCrash;
-}
-
-export type RankedOpportunityDecision = typeof RankedOpportunityDecision[keyof typeof RankedOpportunityDecision];
-
-
-export const RankedOpportunityDecision = {
-  BUY: 'BUY',
-  SELL: 'SELL',
-  WAIT: 'WAIT',
-  NO_TRADE: 'NO_TRADE',
-} as const;
-
-export interface RankedOpportunity {
-  symbol: string;
-  decision: RankedOpportunityDecision;
-  /** @nullable */
-  finalScore?: number | null;
-  opportunityScore: number;
-  /** @nullable */
-  expectancyR?: number | null;
-  sizeMultiplier: number;
-  protectionMode: string;
-  marketRegime: string;
-  reasons: string[];
-}
-
-export type DecisionMemoryInputBrainSnapshot = { [key: string]: unknown };
-
-export type DecisionMemoryInputMarketSnapshot = { [key: string]: unknown };
-
-export interface DecisionMemoryInput {
-  externalId: string;
-  symbol: string;
-  algorithmVersion: string;
-  regime: string;
-  decision: string;
-  /** @nullable */
-  finalScore?: number | null;
-  confidence: number;
-  sizeMultiplier: number;
-  rationale: string;
-  brainSnapshot?: DecisionMemoryInputBrainSnapshot;
-  marketSnapshot?: DecisionMemoryInputMarketSnapshot;
-}
-
-export interface DecisionMemoryOutcome {
-  /** @nullable */
-  outcomeR?: number | null;
-  /** @nullable */
-  maxAdverseExcursionR?: number | null;
-  /** @nullable */
-  maxFavourableExcursionR?: number | null;
-  /** @nullable */
-  exitReason?: string | null;
-}
-
-export type DecisionMemoryBrainSnapshot = { [key: string]: unknown };
-
-export type DecisionMemoryMarketSnapshot = { [key: string]: unknown };
-
-export interface DecisionMemory {
-  id: number;
-  externalId: string;
-  symbol: string;
-  algorithmVersion: string;
-  regime: string;
-  decision: string;
-  /** @nullable */
-  finalScore?: string | null;
-  confidence: string;
-  sizeMultiplier: string;
-  rationale: string;
-  brainSnapshot?: DecisionMemoryBrainSnapshot;
-  marketSnapshot?: DecisionMemoryMarketSnapshot;
-  /** @nullable */
-  outcomeR?: string | null;
-  /** @nullable */
-  maxAdverseExcursionR?: string | null;
-  /** @nullable */
-  maxFavourableExcursionR?: string | null;
-  /** @nullable */
-  exitReason?: string | null;
-  createdAt: string;
-  /** @nullable */
-  closedAt?: string | null;
 }
 
 export interface HealthStatus {
@@ -522,6 +437,82 @@ export interface NewsDuplicate {
   sources: string[];
 }
 
+export type MasterDecisionSummaryDecision = typeof MasterDecisionSummaryDecision[keyof typeof MasterDecisionSummaryDecision];
+
+
+export const MasterDecisionSummaryDecision = {
+  BUY: 'BUY',
+  SELL: 'SELL',
+  WAIT: 'WAIT',
+  NO_TRADE: 'NO_TRADE',
+} as const;
+
+export type MasterDecisionSummaryWeightsUsed = {[key: string]: number};
+
+export type MasterDecisionSummaryBrainScores = {[key: string]: number | null};
+
+export interface MasterDecisionSummary {
+  finalScore: number | null;
+  confidence: number;
+  decision: MasterDecisionSummaryDecision;
+  sizeMultiplier: number;
+  hardVeto: boolean;
+  hardVetoReasons: string[];
+  softGuards: string[];
+  weightsUsed: MasterDecisionSummaryWeightsUsed;
+  brainScores: MasterDecisionSummaryBrainScores;
+  rationale: string;
+}
+
+export type FundamentalBrainResultDirection = typeof FundamentalBrainResultDirection[keyof typeof FundamentalBrainResultDirection];
+
+
+export const FundamentalBrainResultDirection = {
+  BUY: 'BUY',
+  NEUTRAL: 'NEUTRAL',
+  CAUTION: 'CAUTION',
+  UNAVAILABLE: 'UNAVAILABLE',
+} as const;
+
+export type FundamentalMetricLabel = typeof FundamentalMetricLabel[keyof typeof FundamentalMetricLabel];
+
+
+export const FundamentalMetricLabel = {
+  attractive: 'attractive',
+  fair: 'fair',
+  expensive: 'expensive',
+  strong: 'strong',
+  neutral: 'neutral',
+  weak: 'weak',
+  unavailable: 'unavailable',
+} as const;
+
+export interface FundamentalMetric {
+  value: number | null;
+  score: number | null;
+  label: FundamentalMetricLabel;
+}
+
+export type FundamentalBrainResultMetrics = {
+  pe: FundamentalMetric;
+  forwardPe: FundamentalMetric;
+  peg: FundamentalMetric;
+  epsGrowth: FundamentalMetric;
+  revenueGrowth: FundamentalMetric;
+  operatingMargin: FundamentalMetric;
+  roe: FundamentalMetric;
+  debtToEquity: FundamentalMetric;
+};
+
+export interface FundamentalBrainResult {
+  score: number | null;
+  confidence: number;
+  direction: FundamentalBrainResultDirection;
+  metrics: FundamentalBrainResultMetrics;
+  rationale: string;
+  warnings: string[];
+}
+
 export interface AssetAnalysis {
   symbol: string;
   name: string;
@@ -547,6 +538,146 @@ export interface AssetAnalysis {
   newsSourceCoverage: NewsSourceCoverage;
   newsConflicts: NewsConflict[];
   newsDuplicates: NewsDuplicate[];
+  masterDecision: MasterDecisionSummary;
+  fundamentalBrain: FundamentalBrainResult;
+}
+
+export type AxiRulesSnapshotStages = {[key: string]: AxiStageRules};
+
+export interface AxiRulesSnapshot {
+  version: string;
+  verifiedAt: string;
+  sources: string[];
+  stages: AxiRulesSnapshotStages;
+}
+
+export type AxiProgressResultProtectionMode = typeof AxiProgressResultProtectionMode[keyof typeof AxiProgressResultProtectionMode];
+
+
+export const AxiProgressResultProtectionMode = {
+  NORMAL: 'NORMAL',
+  PROFIT_LOCK_ACTIVE: 'PROFIT_LOCK_ACTIVE',
+  RECOVERY: 'RECOVERY',
+  CAPITAL_PRESERVATION: 'CAPITAL_PRESERVATION',
+} as const;
+
+export type AxiProgressResultMarketRegime = typeof AxiProgressResultMarketRegime[keyof typeof AxiProgressResultMarketRegime];
+
+
+export const AxiProgressResultMarketRegime = {
+  GROWTH: 'GROWTH',
+  BALANCED: 'BALANCED',
+  DEFENSIVE: 'DEFENSIVE',
+  CRISIS: 'CRISIS',
+} as const;
+
+export interface AxiProgressResult {
+  stage: string;
+  protectionMode: AxiProgressResultProtectionMode;
+  marketRegime: AxiProgressResultMarketRegime;
+  edgeScore: number | null;
+  closedTrades: number | null;
+  stageDays: number | null;
+  currentEquity: number | null;
+  allocationEquity: number | null;
+  monthlyProfitPct: number | null;
+  stageProfitPct: number | null;
+  progressionReady: boolean;
+  baseSizeMultiplier: number;
+  reasons: string[];
+  rules: AxiStageRules;
+}
+
+export type RankedOpportunityDecision = typeof RankedOpportunityDecision[keyof typeof RankedOpportunityDecision];
+
+
+export const RankedOpportunityDecision = {
+  BUY: 'BUY',
+  SELL: 'SELL',
+  WAIT: 'WAIT',
+  NO_TRADE: 'NO_TRADE',
+} as const;
+
+export type RankedOpportunityProtectionMode = typeof RankedOpportunityProtectionMode[keyof typeof RankedOpportunityProtectionMode];
+
+
+export const RankedOpportunityProtectionMode = {
+  NORMAL: 'NORMAL',
+  PROFIT_LOCK_ACTIVE: 'PROFIT_LOCK_ACTIVE',
+  RECOVERY: 'RECOVERY',
+  CAPITAL_PRESERVATION: 'CAPITAL_PRESERVATION',
+} as const;
+
+export type RankedOpportunityMarketRegime = typeof RankedOpportunityMarketRegime[keyof typeof RankedOpportunityMarketRegime];
+
+
+export const RankedOpportunityMarketRegime = {
+  GROWTH: 'GROWTH',
+  BALANCED: 'BALANCED',
+  DEFENSIVE: 'DEFENSIVE',
+  CRISIS: 'CRISIS',
+} as const;
+
+export interface RankedOpportunity {
+  symbol: string;
+  decision: RankedOpportunityDecision;
+  finalScore: number | null;
+  opportunityScore: number;
+  expectancyR: number | null;
+  sizeMultiplier: number;
+  protectionMode: RankedOpportunityProtectionMode;
+  marketRegime: RankedOpportunityMarketRegime;
+  reasons: string[];
+}
+
+export type DecisionMemoryBrainSnapshot = { [key: string]: unknown };
+
+export type DecisionMemoryMarketSnapshot = { [key: string]: unknown };
+
+export interface DecisionMemory {
+  id: number;
+  externalId: string;
+  symbol: string;
+  algorithmVersion: string;
+  regime: string;
+  decision: string;
+  finalScore: number | null;
+  confidence: number;
+  sizeMultiplier: number;
+  rationale: string;
+  brainSnapshot: DecisionMemoryBrainSnapshot;
+  marketSnapshot: DecisionMemoryMarketSnapshot;
+  outcomeR: number | null;
+  maxAdverseExcursionR: number | null;
+  maxFavourableExcursionR: number | null;
+  exitReason: string | null;
+  createdAt: string;
+  closedAt: string | null;
+}
+
+export type DecisionMemoryInputBrainSnapshot = { [key: string]: unknown };
+
+export type DecisionMemoryInputMarketSnapshot = { [key: string]: unknown };
+
+export interface DecisionMemoryInput {
+  externalId: string;
+  symbol: string;
+  algorithmVersion: string;
+  regime: string;
+  decision: string;
+  finalScore?: number | null;
+  confidence: number;
+  sizeMultiplier: number;
+  rationale: string;
+  brainSnapshot: DecisionMemoryInputBrainSnapshot;
+  marketSnapshot: DecisionMemoryInputMarketSnapshot;
+}
+
+export interface DecisionMemoryOutcomeInput {
+  outcomeR?: number | null;
+  maxAdverseExcursionR?: number | null;
+  maxFavourableExcursionR?: number | null;
+  exitReason?: string | null;
 }
 
 export type NewsFeedSourceStatus = typeof NewsFeedSourceStatus[keyof typeof NewsFeedSourceStatus];
@@ -804,14 +935,17 @@ export const GetAssetAnalysisLocale = {
   en: 'en',
 } as const;
 
-export type GetBrokerQuotesParams = {
-symbols?: string;
+export type GetV72OpportunitiesParams = {
+locale?: GetV72OpportunitiesLocale;
 };
 
-export type GetBrokerHistoryParams = {
-from?: string;
-to?: string;
-};
+export type GetV72OpportunitiesLocale = typeof GetV72OpportunitiesLocale[keyof typeof GetV72OpportunitiesLocale];
+
+
+export const GetV72OpportunitiesLocale = {
+  it: 'it',
+  en: 'en',
+} as const;
 
 export type GetRecentDecisionMemoryParams = {
 /**
@@ -821,3 +955,11 @@ export type GetRecentDecisionMemoryParams = {
 limit?: number;
 };
 
+export type GetBrokerQuotesParams = {
+symbols?: string;
+};
+
+export type GetBrokerHistoryParams = {
+from?: string;
+to?: string;
+};

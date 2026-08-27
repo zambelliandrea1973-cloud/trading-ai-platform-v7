@@ -23,6 +23,7 @@ import type {
   AccountSnapshot,
   AssetAnalysis,
   AxiProgressInput,
+  AxiProgressResult,
   AxiProtectionResult,
   AxiRulesSnapshot,
   BridgeProtocolFailureResponse,
@@ -33,13 +34,14 @@ import type {
   Dashboard,
   DecisionMemory,
   DecisionMemoryInput,
-  DecisionMemoryOutcome,
+  DecisionMemoryOutcomeInput,
   Error,
   GetAssetAnalysisParams,
   GetBrokerHistoryParams,
   GetBrokerQuotesParams,
   GetNewsParams,
   GetRecentDecisionMemoryParams,
+  GetV72OpportunitiesParams,
   HealthStatus,
   Market,
   MasterDecisionInput,
@@ -551,6 +553,471 @@ export function useGetAssetAnalysis<TData = Awaited<ReturnType<typeof getAssetAn
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAssetAnalysisQueryOptions(symbol,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAxiRulesUrl = () => {
+
+
+
+
+  return `/api/axi/rules`
+}
+
+/**
+ * @summary Get the active Axi stage rules
+ */
+export const getAxiRules = async ( options?: Parameters<typeof customFetch>[1]): Promise<AxiRulesSnapshot> => {
+
+  return customFetch<AxiRulesSnapshot>(getGetAxiRulesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAxiRulesQueryKey = () => {
+    return [
+    `/api/axi/rules`
+    ] as const;
+    }
+
+
+export const getGetAxiRulesQueryOptions = <TData = Awaited<ReturnType<typeof getAxiRules>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAxiRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAxiRulesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAxiRules>>> = ({ signal }) => getAxiRules({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAxiRules>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAxiRulesQueryResult = NonNullable<Awaited<ReturnType<typeof getAxiRules>>>
+export type GetAxiRulesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the active Axi stage rules
+ */
+
+export function useGetAxiRules<TData = Awaited<ReturnType<typeof getAxiRules>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAxiRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAxiRulesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAxiProgressUrl = () => {
+
+
+
+
+  return `/api/axi/progress`
+}
+
+/**
+ * @summary Get the current PAPER Axi progression state
+ */
+export const getAxiProgress = async ( options?: Parameters<typeof customFetch>[1]): Promise<AxiProgressResult> => {
+
+  return customFetch<AxiProgressResult>(getGetAxiProgressUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAxiProgressQueryKey = () => {
+    return [
+    `/api/axi/progress`
+    ] as const;
+    }
+
+
+export const getGetAxiProgressQueryOptions = <TData = Awaited<ReturnType<typeof getAxiProgress>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAxiProgress>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAxiProgressQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAxiProgress>>> = ({ signal }) => getAxiProgress({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAxiProgress>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAxiProgressQueryResult = NonNullable<Awaited<ReturnType<typeof getAxiProgress>>>
+export type GetAxiProgressQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the current PAPER Axi progression state
+ */
+
+export function useGetAxiProgress<TData = Awaited<ReturnType<typeof getAxiProgress>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAxiProgress>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAxiProgressQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetV72OpportunitiesUrl = (params?: GetV72OpportunitiesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v72/opportunities-style?${stringifiedParams}` : `/api/v72/opportunities-style`
+}
+
+/**
+ * @summary Get V7.2 ranked paper opportunities
+ */
+export const getV72Opportunities = async (params?: GetV72OpportunitiesParams, options?: Parameters<typeof customFetch>[1]): Promise<RankedOpportunity[]> => {
+
+  return customFetch<RankedOpportunity[]>(getGetV72OpportunitiesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV72OpportunitiesQueryKey = (params?: GetV72OpportunitiesParams,) => {
+    return [
+    `/api/v72/opportunities-style`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV72OpportunitiesQueryOptions = <TData = Awaited<ReturnType<typeof getV72Opportunities>>, TError = ErrorType<unknown>>(params?: GetV72OpportunitiesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV72Opportunities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV72OpportunitiesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV72Opportunities>>> = ({ signal }) => getV72Opportunities(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV72Opportunities>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV72OpportunitiesQueryResult = NonNullable<Awaited<ReturnType<typeof getV72Opportunities>>>
+export type GetV72OpportunitiesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get V7.2 ranked paper opportunities
+ */
+
+export function useGetV72Opportunities<TData = Awaited<ReturnType<typeof getV72Opportunities>>, TError = ErrorType<unknown>>(
+ params?: GetV72OpportunitiesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV72Opportunities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV72OpportunitiesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDecisionMemoryUrl = () => {
+
+
+
+
+  return `/api/decision-memory`
+}
+
+/**
+ * @summary Persist a PAPER decision proposal
+ */
+export const createDecisionMemory = async (decisionMemoryInput: DecisionMemoryInput, options?: Parameters<typeof customFetch>[1]): Promise<DecisionMemory> => {
+
+  return customFetch<DecisionMemory>(getCreateDecisionMemoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(decisionMemoryInput)
+  }
+);}
+
+
+
+
+
+export const getCreateDecisionMemoryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDecisionMemory>>, TError,{data: BodyType<DecisionMemoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDecisionMemory>>, TError,{data: BodyType<DecisionMemoryInput>}, TContext> => {
+
+const mutationKey = ['createDecisionMemory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDecisionMemory>>, {data: BodyType<DecisionMemoryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDecisionMemory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDecisionMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof createDecisionMemory>>>
+    export type CreateDecisionMemoryMutationBody = BodyType<DecisionMemoryInput>
+    export type CreateDecisionMemoryMutationError = ErrorType<void>
+
+    /**
+ * @summary Persist a PAPER decision proposal
+ */
+export const useCreateDecisionMemory = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDecisionMemory>>, TError,{data: BodyType<DecisionMemoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDecisionMemory>>,
+        TError,
+        {data: BodyType<DecisionMemoryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateDecisionMemoryMutationOptions(options));
+    }
+
+export const getUpdateDecisionMemoryOutcomeUrl = (externalId: string,) => {
+
+
+
+
+  return `/api/decision-memory/${externalId}/outcome`
+}
+
+/**
+ * @summary Record the outcome of a PAPER decision
+ */
+export const updateDecisionMemoryOutcome = async (externalId: string,
+    decisionMemoryOutcomeInput: DecisionMemoryOutcomeInput, options?: Parameters<typeof customFetch>[1]): Promise<DecisionMemory> => {
+
+  return customFetch<DecisionMemory>(getUpdateDecisionMemoryOutcomeUrl(externalId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(decisionMemoryOutcomeInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateDecisionMemoryOutcomeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, TError,{externalId: string;data: BodyType<DecisionMemoryOutcomeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, TError,{externalId: string;data: BodyType<DecisionMemoryOutcomeInput>}, TContext> => {
+
+const mutationKey = ['updateDecisionMemoryOutcome'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, {externalId: string;data: BodyType<DecisionMemoryOutcomeInput>}> = (props) => {
+          const {externalId,data} = props ?? {};
+
+          return  updateDecisionMemoryOutcome(externalId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDecisionMemoryOutcomeMutationResult = NonNullable<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>>
+    export type UpdateDecisionMemoryOutcomeMutationBody = BodyType<DecisionMemoryOutcomeInput>
+    export type UpdateDecisionMemoryOutcomeMutationError = ErrorType<void>
+
+    /**
+ * @summary Record the outcome of a PAPER decision
+ */
+export const useUpdateDecisionMemoryOutcome = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, TError,{externalId: string;data: BodyType<DecisionMemoryOutcomeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>,
+        TError,
+        {externalId: string;data: BodyType<DecisionMemoryOutcomeInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateDecisionMemoryOutcomeMutationOptions(options));
+    }
+
+export const getGetRecentDecisionMemoryUrl = (params?: GetRecentDecisionMemoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/decision-memory/recent?${stringifiedParams}` : `/api/decision-memory/recent`
+}
+
+/**
+ * @summary List recent PAPER decisions
+ */
+export const getRecentDecisionMemory = async (params?: GetRecentDecisionMemoryParams, options?: Parameters<typeof customFetch>[1]): Promise<DecisionMemory[]> => {
+
+  return customFetch<DecisionMemory[]>(getGetRecentDecisionMemoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecentDecisionMemoryQueryKey = (params?: GetRecentDecisionMemoryParams,) => {
+    return [
+    `/api/decision-memory/recent`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetRecentDecisionMemoryQueryOptions = <TData = Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError = ErrorType<unknown>>(params?: GetRecentDecisionMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecentDecisionMemoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecentDecisionMemory>>> = ({ signal }) => getRecentDecisionMemory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRecentDecisionMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof getRecentDecisionMemory>>>
+export type GetRecentDecisionMemoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List recent PAPER decisions
+ */
+
+export function useGetRecentDecisionMemory<TData = Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError = ErrorType<unknown>>(
+ params?: GetRecentDecisionMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRecentDecisionMemoryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1104,83 +1571,6 @@ export const useEvaluateDecision = <TError = ErrorType<void>,
       return useMutation(getEvaluateDecisionMutationOptions(options));
     }
 
-export const getGetAxiRulesUrl = () => {
-
-
-
-
-  return `/api/axi/rules`
-}
-
-/**
- * @summary Get the latest verified Axi Select rules
- */
-export const getAxiRules = async ( options?: Parameters<typeof customFetch>[1]): Promise<AxiRulesSnapshot> => {
-
-  return customFetch<AxiRulesSnapshot>(getGetAxiRulesUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetAxiRulesQueryKey = () => {
-    return [
-    `/api/axi/rules`
-    ] as const;
-    }
-
-
-export const getGetAxiRulesQueryOptions = <TData = Awaited<ReturnType<typeof getAxiRules>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAxiRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetAxiRulesQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAxiRules>>> = ({ signal }) => getAxiRules({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAxiRules>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetAxiRulesQueryResult = NonNullable<Awaited<ReturnType<typeof getAxiRules>>>
-export type GetAxiRulesQueryError = ErrorType<unknown>
-
-
-/**
- * @summary Get the latest verified Axi Select rules
- */
-
-export function useGetAxiRules<TData = Awaited<ReturnType<typeof getAxiRules>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAxiRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetAxiRulesQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
 export const getEvaluateAxiProtectionUrl = () => {
 
 
@@ -1321,232 +1711,5 @@ export const useRankV72Opportunities = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRankV72OpportunitiesMutationOptions(options));
-    }
-
-export const getCreateDecisionMemoryUrl = () => {
-
-
-
-
-  return `/api/decision-memory`
-}
-
-/**
- * @summary Persist a PAPER decision for the signed-in user
- */
-export const createDecisionMemory = async (decisionMemoryInput: DecisionMemoryInput, options?: Parameters<typeof customFetch>[1]): Promise<DecisionMemory> => {
-
-  return customFetch<DecisionMemory>(getCreateDecisionMemoryUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(decisionMemoryInput)
-  }
-);}
-
-
-
-
-
-export const getCreateDecisionMemoryMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDecisionMemory>>, TError,{data: BodyType<DecisionMemoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDecisionMemory>>, TError,{data: BodyType<DecisionMemoryInput>}, TContext> => {
-
-const mutationKey = ['createDecisionMemory'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDecisionMemory>>, {data: BodyType<DecisionMemoryInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  createDecisionMemory(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateDecisionMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof createDecisionMemory>>>
-    export type CreateDecisionMemoryMutationBody = BodyType<DecisionMemoryInput>
-    export type CreateDecisionMemoryMutationError = ErrorType<void>
-
-    /**
- * @summary Persist a PAPER decision for the signed-in user
- */
-export const useCreateDecisionMemory = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDecisionMemory>>, TError,{data: BodyType<DecisionMemoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof createDecisionMemory>>,
-        TError,
-        {data: BodyType<DecisionMemoryInput>},
-        TContext
-      > => {
-      return useMutation(getCreateDecisionMemoryMutationOptions(options));
-    }
-
-export const getGetRecentDecisionMemoryUrl = (params?: GetRecentDecisionMemoryParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/decision-memory/recent?${stringifiedParams}` : `/api/decision-memory/recent`
-}
-
-/**
- * @summary List recent PAPER decisions for the signed-in user
- */
-export const getRecentDecisionMemory = async (params?: GetRecentDecisionMemoryParams, options?: Parameters<typeof customFetch>[1]): Promise<DecisionMemory[]> => {
-
-  return customFetch<DecisionMemory[]>(getGetRecentDecisionMemoryUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetRecentDecisionMemoryQueryKey = (params?: GetRecentDecisionMemoryParams,) => {
-    return [
-    `/api/decision-memory/recent`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetRecentDecisionMemoryQueryOptions = <TData = Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError = ErrorType<unknown>>(params?: GetRecentDecisionMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetRecentDecisionMemoryQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecentDecisionMemory>>> = ({ signal }) => getRecentDecisionMemory(params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetRecentDecisionMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof getRecentDecisionMemory>>>
-export type GetRecentDecisionMemoryQueryError = ErrorType<unknown>
-
-
-/**
- * @summary List recent PAPER decisions for the signed-in user
- */
-
-export function useGetRecentDecisionMemory<TData = Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError = ErrorType<unknown>>(
- params?: GetRecentDecisionMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecentDecisionMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetRecentDecisionMemoryQueryOptions(params,options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getUpdateDecisionMemoryOutcomeUrl = (externalId: string,) => {
-
-
-
-
-  return `/api/decision-memory/${externalId}/outcome`
-}
-
-/**
- * @summary Close a signed-in user's PAPER decision
- */
-export const updateDecisionMemoryOutcome = async (externalId: string,
-    decisionMemoryOutcome: DecisionMemoryOutcome, options?: Parameters<typeof customFetch>[1]): Promise<DecisionMemory> => {
-
-  return customFetch<DecisionMemory>(getUpdateDecisionMemoryOutcomeUrl(externalId),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(decisionMemoryOutcome)
-  }
-);}
-
-
-
-
-
-export const getUpdateDecisionMemoryOutcomeMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, TError,{externalId: string;data: BodyType<DecisionMemoryOutcome>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, TError,{externalId: string;data: BodyType<DecisionMemoryOutcome>}, TContext> => {
-
-const mutationKey = ['updateDecisionMemoryOutcome'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, {externalId: string;data: BodyType<DecisionMemoryOutcome>}> = (props) => {
-          const {externalId,data} = props ?? {};
-
-          return  updateDecisionMemoryOutcome(externalId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateDecisionMemoryOutcomeMutationResult = NonNullable<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>>
-    export type UpdateDecisionMemoryOutcomeMutationBody = BodyType<DecisionMemoryOutcome>
-    export type UpdateDecisionMemoryOutcomeMutationError = ErrorType<void>
-
-    /**
- * @summary Close a signed-in user's PAPER decision
- */
-export const useUpdateDecisionMemoryOutcome = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>, TError,{externalId: string;data: BodyType<DecisionMemoryOutcome>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof updateDecisionMemoryOutcome>>,
-        TError,
-        {externalId: string;data: BodyType<DecisionMemoryOutcome>},
-        TContext
-      > => {
-      return useMutation(getUpdateDecisionMemoryOutcomeMutationOptions(options));
     }
 

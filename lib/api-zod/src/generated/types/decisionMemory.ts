@@ -15,22 +15,16 @@ export interface DecisionMemory {
   algorithmVersion: string;
   regime: string;
   decision: string;
-  /** @nullable */
-  finalScore?: string | null;
-  confidence: string;
-  sizeMultiplier: string;
+  finalScore: number | null;
+  confidence: number;
+  sizeMultiplier: number;
   rationale: string;
-  brainSnapshot?: DecisionMemoryBrainSnapshot;
-  marketSnapshot?: DecisionMemoryMarketSnapshot;
-  /** @nullable */
-  outcomeR?: string | null;
-  /** @nullable */
-  maxAdverseExcursionR?: string | null;
-  /** @nullable */
-  maxFavourableExcursionR?: string | null;
-  /** @nullable */
-  exitReason?: string | null;
+  brainSnapshot: DecisionMemoryBrainSnapshot;
+  marketSnapshot: DecisionMemoryMarketSnapshot;
+  outcomeR: number | null;
+  maxAdverseExcursionR: number | null;
+  maxFavourableExcursionR: number | null;
+  exitReason: string | null;
   createdAt: Date;
-  /** @nullable */
-  closedAt?: Date | null;
+  closedAt: Date | null;
 }

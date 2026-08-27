@@ -5,18 +5,15 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AxiStageRulesStage } from './axiStageRulesStage';
 
 export interface AxiStageRules {
-  stage: string;
+  stage: AxiStageRulesStage;
   minEquityUsd: number;
   minEdgeScore: number;
-  /** @nullable */
-  profitTargetPct?: number | null;
-  /** @nullable */
-  minDays?: number | null;
-  /** @nullable */
-  minTrades?: number | null;
+  profitTargetPct: number | null;
+  minDays: number | null;
+  minTrades: number | null;
   maxLossPct: number;
-  /** @nullable */
-  leverage?: number | null;
+  leverage: number | null;
 }

@@ -6,17 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RankedOpportunityDecision } from './rankedOpportunityDecision';
+import type { RankedOpportunityMarketRegime } from './rankedOpportunityMarketRegime';
+import type { RankedOpportunityProtectionMode } from './rankedOpportunityProtectionMode';
 
 export interface RankedOpportunity {
   symbol: string;
   decision: RankedOpportunityDecision;
-  /** @nullable */
-  finalScore?: number | null;
+  finalScore: number | null;
   opportunityScore: number;
-  /** @nullable */
-  expectancyR?: number | null;
+  expectancyR: number | null;
   sizeMultiplier: number;
-  protectionMode: string;
-  marketRegime: string;
+  protectionMode: RankedOpportunityProtectionMode;
+  marketRegime: RankedOpportunityMarketRegime;
   reasons: string[];
 }

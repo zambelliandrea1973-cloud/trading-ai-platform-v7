@@ -11,7 +11,9 @@ import type { AssetAnalysisDataStatus } from './assetAnalysisDataStatus';
 import type { AssetAnalysisIndicators } from './assetAnalysisIndicators';
 import type { AssetAnalysisNewsSourceStatus } from './assetAnalysisNewsSourceStatus';
 import type { BrainScore } from './brainScore';
+import type { FundamentalBrainResult } from './fundamentalBrainResult';
 import type { HistoricalPrecedent } from './historicalPrecedent';
+import type { MasterDecisionSummary } from './masterDecisionSummary';
 import type { NewsConflict } from './newsConflict';
 import type { NewsDuplicate } from './newsDuplicate';
 import type { NewsItem } from './newsItem';
@@ -43,4 +45,6 @@ export interface AssetAnalysis {
   newsSourceCoverage: NewsSourceCoverage;
   newsConflicts: NewsConflict[];
   newsDuplicates: NewsDuplicate[];
+  masterDecision: MasterDecisionSummary;
+  fundamentalBrain: FundamentalBrainResult;
 }
