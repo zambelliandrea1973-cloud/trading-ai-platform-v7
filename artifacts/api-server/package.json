@@ -7,7 +7,7 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
-    "test": "tsx --test test/mt5-bridge-audit.test.ts test/broker-routes.test.ts test/news-verification-audit.test.ts test/fundamental-brain.test.ts",
+    "test": "tsx --test test/mt5-bridge-audit.test.ts test/broker-routes.test.ts test/news-verification-audit.test.ts test/fundamental-brain.test.ts test/master-decision-engine.test.ts",
     "test:postgres": "tsx --test test/postgres-audit.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
