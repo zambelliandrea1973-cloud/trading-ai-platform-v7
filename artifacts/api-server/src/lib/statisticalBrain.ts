@@ -17,7 +17,7 @@ export type StatisticalBrainResult = {
   regime: "STABLE" | "DIVERGENCE" | "BREAKDOWN" | "INSUFFICIENT";
   rationale: string;
   warnings: string[];
-  metrics: Record<string, number | boolean | null>;
+  metrics: Record<string, number | boolean | string | null | undefined>;
 };
 
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value));
