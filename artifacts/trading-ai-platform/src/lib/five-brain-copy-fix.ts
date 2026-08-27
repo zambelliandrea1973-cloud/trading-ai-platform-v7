@@ -3,6 +3,9 @@ function replaceText(text: string) {
     .replace(/Lettura a (?:tre|cinque|5) cervelli/gi, 'Lettura AI')
     .replace(/Dettaglio decisione a (?:tre|cinque|5) cervelli/gi, 'Dettaglio decisione AI')
     .replace(/dove i (?:tre|cinque|5) cervelli concordano/gi, 'dove l\'AI rileva consenso')
+    .replace(/la logica dei (?:tre|cinque|5) cervelli/gi, 'la logica interna dell\'AI')
+    .replace(/i (?:tre|cinque|5) cervelli non hanno/gi, 'l\'AI non ha')
+    .replace(/i (?:tre|cinque|5) cervelli/gi, 'l\'AI')
     .replace(/(?:Tre|Cinque|5) cervelli pronti/gi, 'AI pronta')
     .replace(/(?:Tre|Cinque|5) cervelli operativi/gi, 'AI ATTIVA')
     .replace(/Consenso\s+(?:Tre|Cinque|5) cervelli/gi, 'AI attiva')
@@ -14,8 +17,7 @@ function replaceText(text: string) {
     .replace(/risk brain/gi, 'Risk analysis')
     .replace(/cervello tecnico/gi, 'Analisi tecnica')
     .replace(/cervello fondamentale/gi, 'Analisi fondamentale')
-    .replace(/cervello di rischio/gi, 'Analisi del rischio')
-    .replace(/risk brain/gi, 'analisi del rischio');
+    .replace(/cervello (?:di|del) rischio/gi, 'Analisi del rischio');
 }
 
 function patchTextNodes(root: Node) {
@@ -46,7 +48,6 @@ function hideInternalArchitectureCards(root: ParentNode) {
     }
   }
 
-  // Remove the now-empty five-column architecture strip when all cards were hidden.
   for (const grid of root.querySelectorAll<HTMLElement>('.grid')) {
     const text = grid.textContent ?? '';
     if (/CERVELLO\s+1/i.test(text) && /CERVELLO\s+5/i.test(text)) {
@@ -71,7 +72,6 @@ export function installFiveBrainCopyFix() {
     for (const mutation of mutations) {
       for (const added of mutation.addedNodes) patchVisibleUi(added);
     }
-    // React can update text without adding a complete subtree; re-check the page after each batch.
     patchVisibleUi(document);
   });
 
