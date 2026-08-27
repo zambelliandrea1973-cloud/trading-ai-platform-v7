@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "mMabxfu9q5B2JAd4f6vJi"
+uri = "file://artifacts/trading-ai-platform-video-preview/public/audio/bg_music.mp3"
+type = "audio"
+title = "professional fintech background music"
+description = "Generated music: Cinematic uplifting electronic-orchestral instrumental background music scoring a professional fintech and AI trading product film. Restrained analog synth pulse, warm low strings, p…"

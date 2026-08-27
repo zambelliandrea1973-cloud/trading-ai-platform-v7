@@ -1,0 +1,28 @@
+kind = "video"
+previewPath = "/trading-ai-platform-video-preview/"
+title = "Trading AI Platform V7 — Video Preview"
+description = "A standalone 16:9 animated product preview presenting Trading AI Platform V7 as a professional, explainable, PAPER-only multi-asset trading decision cockpit."
+version = "1.0.0"
+id = "artifacts/trading-ai-platform-video-preview"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/trading-ai-platform-video-preview/" ]
+localPort = 25692
+
+[services.development]
+run = "pnpm --filter @workspace/trading-ai-platform-video-preview run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trading-ai-platform-video-preview", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trading-ai-platform-video-preview/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25692"
+BASE_PATH = "/trading-ai-platform-video-preview/"
