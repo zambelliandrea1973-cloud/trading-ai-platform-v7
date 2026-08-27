@@ -1,11 +1,3 @@
-const replacements: Array<[RegExp, string]> = [
-  [/tre cervelli/g, 'cinque cervelli'],
-  [/Tre cervelli/g, 'Cinque cervelli'],
-  [/a tre cervelli/g, 'a cinque cervelli'],
-  [/A tre cervelli/g, 'A cinque cervelli'],
-  [/three brains/gi, (match: string) => match[0] === 'T' ? 'Five brains' : 'five brains'] as unknown as [RegExp, string],
-];
-
 function replaceText(text: string) {
   return text
     .replace(/tre cervelli/g, 'cinque cervelli')
