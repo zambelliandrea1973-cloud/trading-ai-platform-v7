@@ -1,6 +1,8 @@
 export type DecisionSide = 'BUY' | 'SELL' | 'WAIT' | 'NO_TRADE';
 export type LearningSource = 'AI' | 'BERTO' | 'CONSENSUS' | 'DIVERGENCE';
 export type ValidationStage = 'RESEARCH' | 'BACKTEST' | 'WALK_FORWARD' | 'PAPER' | 'APPROVED';
+export type ApprovalDecision = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CONTINUE_TESTING';
+export type OutcomeCheckpoint = 'M15' | 'H1' | 'H4' | 'D1' | 'TRADE_CLOSE' | 'CUSTOM';
 
 export type BrainSnapshot = {
   technical?: { score?: number | null; confidence?: number | null };
@@ -39,8 +41,11 @@ export type MarketContextSnapshot = {
 };
 
 export type TradeOutcome = {
+  checkpoint: OutcomeCheckpoint;
   evaluatedAt: string;
   horizonMinutes?: number | null;
+  signalPrice?: number | null;
+  marketPrice?: number | null;
   entryPrice?: number | null;
   exitPrice?: number | null;
   pnl?: number | null;
@@ -48,6 +53,7 @@ export type TradeOutcome = {
   mfePct?: number | null;
   maePct?: number | null;
   realized?: boolean;
+  tradeClosed?: boolean;
   result?: 'WIN' | 'LOSS' | 'FLAT' | 'NOT_TRADED' | null;
 };
 
@@ -64,6 +70,8 @@ export type SharedLearningRecord = {
   };
   execution?: {
     executed: boolean;
+    executionMode?: 'LIVE' | 'PAPER' | 'SHADOW' | null;
+    strategy?: 'AI' | 'BERTO' | 'HYBRID' | null;
     side?: 'BUY' | 'SELL' | null;
     sizeFraction?: number | null;
     blockedByRisk?: boolean;
@@ -82,12 +90,24 @@ export type LearningSegment = {
   volatilityRegime?: string;
 };
 
+export type HumanApproval = {
+  decision: ApprovalDecision;
+  approvedBy?: 'OWNER' | null;
+  decidedAt?: string | null;
+  ownerNote?: string | null;
+  explanationAcknowledged: boolean;
+  evidenceReviewed: boolean;
+};
+
 export type WeightProposal = {
   id: string;
   createdAt: string;
   segment: LearningSegment;
   reason: string;
+  plainLanguageExplanation: string;
   sampleSize: number;
+  observationStart?: string | null;
+  observationEnd?: string | null;
   proposedChanges: {
     bertoTrustDelta?: number;
     technicalWeightDelta?: number;
@@ -102,9 +122,16 @@ export type WeightProposal = {
     candidateMaxDrawdownPct?: number | null;
     baselineProfitFactor?: number | null;
     candidateProfitFactor?: number | null;
+    baselineWinRatePct?: number | null;
+    candidateWinRatePct?: number | null;
+    baselineExpectancy?: number | null;
+    candidateExpectancy?: number | null;
     outOfSampleTrades?: number | null;
+    paperTrades?: number | null;
+    sourceRefs?: string[];
   };
   stage: ValidationStage;
+  humanApproval: HumanApproval;
   approvedForProduction: boolean;
 };
 
@@ -113,6 +140,8 @@ export type LearningPolicy = {
   minOutOfSampleTrades: number;
   requireWalkForward: boolean;
   requirePaperValidation: boolean;
+  requireOwnerApproval: true;
+  requireExplainableEvidence: true;
   allowLiveSelfModification: false;
 };
 
@@ -121,8 +150,18 @@ export const DEFAULT_LEARNING_POLICY: LearningPolicy = {
   minOutOfSampleTrades: 75,
   requireWalkForward: true,
   requirePaperValidation: true,
+  requireOwnerApproval: true,
+  requireExplainableEvidence: true,
   allowLiveSelfModification: false,
 };
+
+export const STANDARD_OUTCOME_CHECKPOINTS: ReadonlyArray<{ checkpoint: OutcomeCheckpoint; horizonMinutes: number | null }> = [
+  { checkpoint: 'M15', horizonMinutes: 15 },
+  { checkpoint: 'H1', horizonMinutes: 60 },
+  { checkpoint: 'H4', horizonMinutes: 240 },
+  { checkpoint: 'D1', horizonMinutes: 1440 },
+  { checkpoint: 'TRADE_CLOSE', horizonMinutes: null },
+];
 
 function directional(decision: DecisionSide) {
   return decision === 'BUY' || decision === 'SELL';
@@ -139,13 +178,67 @@ export function classifyRelationship(aiDecision: DecisionSide, bertoDecision: De
   return { source, agreement, aiDecision, bertoDecision };
 }
 
+export function hasOwnerApproval(proposal: WeightProposal) {
+  return proposal.humanApproval.decision === 'APPROVED'
+    && proposal.humanApproval.approvedBy === 'OWNER'
+    && proposal.humanApproval.explanationAcknowledged
+    && proposal.humanApproval.evidenceReviewed;
+}
+
 export function canPromoteProposal(proposal: WeightProposal, policy: LearningPolicy = DEFAULT_LEARNING_POLICY) {
-  if (proposal.approvedForProduction) return true;
   if (proposal.sampleSize < policy.minSampleSize) return false;
   if ((proposal.evidence.outOfSampleTrades ?? 0) < policy.minOutOfSampleTrades) return false;
   if (policy.requireWalkForward && !['WALK_FORWARD', 'PAPER', 'APPROVED'].includes(proposal.stage)) return false;
   if (policy.requirePaperValidation && !['PAPER', 'APPROVED'].includes(proposal.stage)) return false;
-  return proposal.stage === 'APPROVED';
+  if (policy.requireExplainableEvidence && !proposal.plainLanguageExplanation.trim()) return false;
+  if (policy.requireOwnerApproval && !hasOwnerApproval(proposal)) return false;
+  return proposal.stage === 'APPROVED' && proposal.approvedForProduction === true;
+}
+
+export function approveProposalForProduction(proposal: WeightProposal, ownerNote?: string): WeightProposal {
+  return {
+    ...proposal,
+    stage: 'APPROVED',
+    approvedForProduction: true,
+    humanApproval: {
+      decision: 'APPROVED',
+      approvedBy: 'OWNER',
+      decidedAt: new Date().toISOString(),
+      ownerNote: ownerNote ?? null,
+      explanationAcknowledged: true,
+      evidenceReviewed: true,
+    },
+  };
+}
+
+export function rejectProposal(proposal: WeightProposal, ownerNote?: string): WeightProposal {
+  return {
+    ...proposal,
+    approvedForProduction: false,
+    humanApproval: {
+      decision: 'REJECTED',
+      approvedBy: 'OWNER',
+      decidedAt: new Date().toISOString(),
+      ownerNote: ownerNote ?? null,
+      explanationAcknowledged: true,
+      evidenceReviewed: true,
+    },
+  };
+}
+
+export function continueTestingProposal(proposal: WeightProposal, ownerNote?: string): WeightProposal {
+  return {
+    ...proposal,
+    approvedForProduction: false,
+    humanApproval: {
+      decision: 'CONTINUE_TESTING',
+      approvedBy: 'OWNER',
+      decidedAt: new Date().toISOString(),
+      ownerNote: ownerNote ?? null,
+      explanationAcknowledged: true,
+      evidenceReviewed: true,
+    },
+  };
 }
 
 export function createLearningRecord(input: Omit<SharedLearningRecord, 'relationship' | 'createdAt'>): SharedLearningRecord {
