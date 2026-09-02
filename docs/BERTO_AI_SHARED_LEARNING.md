@@ -18,6 +18,14 @@ Flusso previsto:
 
 Nessun sistema deve modificare direttamente l'altro durante l'operatività live.
 
+## Modalità iniziale prevista
+
+Dopo una prima fase demo:
+- BERTO potrà operare LIVE solo quando i suoi parametri di ingaggio saranno definiti e approvati.
+- Il motore AI continuerà in SHADOW/DEMO sugli stessi dati e timestamp.
+- Le decisioni dei due sistemi saranno confrontate senza consentire modifiche reciproche automatiche.
+- Un eventuale sistema HYBRID resterà inizialmente solo sperimentale/paper.
+
 ## Cosa viene registrato per ogni osservazione
 
 ### Contesto di mercato
@@ -64,19 +72,33 @@ Il disaccordo viene conservato come informazione utile e non eliminato.
 
 ### Esecuzione
 - trade eseguito o no
+- modalità LIVE/PAPER/SHADOW
+- strategia che ha generato il trade
 - BUY/SELL
 - size
 - eventuale blocco del rischio
 - motivazione del blocco o mancata esecuzione
 
 ### Esito
-Per uno o più orizzonti temporali:
-- prezzo entrata/uscita
+Ogni decisione viene monitorata ai checkpoint standard:
+- 15 minuti
+- 1 ora
+- 4 ore
+- 1 giorno
+- chiusura effettiva o simulata dell'operazione
+
+Per ogni checkpoint vengono salvati:
+- prezzo del segnale
+- prezzo di mercato al checkpoint
+- prezzo entrata/uscita quando applicabile
 - P&L
 - P&L %
 - MFE (Maximum Favorable Excursion)
 - MAE (Maximum Adverse Excursion)
+- stato trade chiuso/aperto
 - WIN/LOSS/FLAT/NOT_TRADED
+
+La chiusura del trade resta la misura principale dell'esito operativo; i checkpoint intermedi servono a valutare qualità dell'ingresso, gestione e timing dell'uscita.
 
 ## Apprendimento previsto
 
@@ -98,7 +120,6 @@ Esempi di domande future:
 ## Pesi dinamici: solo come proposta
 
 La memoria comune potrà generare proposte del tipo:
-
 - aumento/riduzione fiducia BERTO
 - variazione peso tecnico
 - variazione peso macro/news
@@ -107,22 +128,49 @@ La memoria comune potrà generare proposte del tipo:
 
 Le modifiche saranno specifiche per segmento e non globali per default.
 
-## Regole di sicurezza dell'apprendimento
+## Human Approval Gate obbligatorio
 
-Una proposta non entra in produzione direttamente.
+Nessuna proposta può entrare in produzione automaticamente.
+
+Prima di chiedere autorizzazione al proprietario, il sistema deve mostrare in modo verificabile e comprensibile:
+- numero di casi analizzati
+- periodo temporale coperto
+- asset e timeframe interessati
+- regime di mercato interessato
+- rendimento baseline e candidato
+- win rate baseline e candidato
+- profit factor baseline e candidato
+- expectancy baseline e candidato
+- drawdown baseline e candidato
+- numero di trade out-of-sample
+- numero di trade paper, quando disponibile
+- fonti/riferimenti dei dati usati
+- spiegazione in linguaggio semplice di cosa cambia e perché
+
+Il proprietario può scegliere esclusivamente una delle seguenti decisioni:
+- APPROVA
+- RIFIUTA
+- CONTINUA A TESTARE
+
+L'autorizzazione deve essere esplicita e registrata. Una proposta non approvata dal proprietario non può modificare BERTO, i pesi AI o la logica live.
+
+## Regole di sicurezza dell'apprendimento
 
 Pipeline obbligatoria:
 
-`RESEARCH → BACKTEST → WALK_FORWARD → PAPER → APPROVED`
+`RESEARCH → BACKTEST → WALK_FORWARD → PAPER → APPROVAZIONE PROPRIETARIO → APPROVED`
 
 Baseline iniziale:
 - almeno 300 casi per una proposta significativa
 - almeno 75 trade out-of-sample
 - walk-forward obbligatorio
 - paper validation obbligatoria
+- spiegazione comprensibile obbligatoria
+- revisione dei dati da parte del proprietario obbligatoria
+- approvazione esplicita del proprietario obbligatoria
 - self-modification live vietata
 
-Queste soglie sono configurabili e dovranno essere rivalutate quando avremo dati reali sufficienti.
+Queste soglie sono configurabili e dovranno essere rivalutate quando avremo dati reali sufficienti, ma il requisito di autorizzazione umana resta obbligatorio.
 
 ## Parametri BERTO ancora mancanti
 
@@ -148,10 +196,14 @@ Il modulo `artifacts/api-server/src/lib/learningMemoryEngine.ts` definisce:
 - snapshot AI
 - snapshot BERTO
 - contesto di mercato
-- outcome
+- outcome con checkpoint standard
 - record di memoria condivisa
+- modalità LIVE/PAPER/SHADOW
 - classificazione consensus/divergence
 - schema delle proposte di peso
+- metriche verificabili per la proposta
+- Human Approval Gate
+- funzioni APPROVE / REJECT / CONTINUE_TESTING
 - policy di validazione
 - blocco della modifica live automatica
 
@@ -161,7 +213,9 @@ Il modulo `artifacts/api-server/src/lib/learningMemoryEngine.ts` definisce:
 2. Collegare BERTO e AI allo stesso feed e allo stesso timestamp.
 3. Persistire i SharedLearningRecord nel database.
 4. Registrare anche WAIT/NO_TRADE e trade bloccati dal rischio.
-5. Calcolare outcome a più orizzonti temporali.
+5. Calcolare outcome a 15m, 1h, 4h, 1d e fino alla chiusura del trade.
 6. Avviare confronto indipendente BERTO vs AI vs CONSENSUS.
 7. Solo dopo campione sufficiente, generare proposte di adattamento.
-8. Validare ogni proposta fuori campione e in paper prima di qualsiasi promozione.
+8. Validare ogni proposta fuori campione e in paper.
+9. Presentare al proprietario dati, fonti e spiegazione comprensibile.
+10. Applicare una modifica solo dopo autorizzazione esplicita del proprietario.
