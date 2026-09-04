@@ -9,6 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test": "tsx --test test/mt5-bridge-audit.test.ts test/broker-routes.test.ts test/news-verification-audit.test.ts test/fundamental-brain.test.ts test/master-decision-engine.test.ts test/v72-performance-resilience.test.ts",
     "test:postgres": "tsx --test test/postgres-audit.test.ts",
+    "historical:bootstrap": "tsx ./src/jobs/bootstrap-historical-data.ts",
+    "historical:axi": "tsx ./src/jobs/bootstrap-axi-history.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
