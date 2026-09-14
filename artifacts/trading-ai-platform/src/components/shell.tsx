@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Cpu, History, LayoutDashboard, LineChart, LogOut, Newspaper, Radar, Settings, ShieldCheck, SlidersHorizontal, WalletCards, X } from 'lucide-react';
+import { Activity, ArrowRightLeft, BarChart3, Cpu, History, LayoutDashboard, LineChart, LogOut, Newspaper, Radar, Settings, ShieldCheck, SlidersHorizontal, WalletCards, X } from 'lucide-react';
 import { useClerk, useUser } from '@clerk/react';
 import { Link, useLocation } from 'wouter';
 import { type ReactNode } from 'react';
@@ -14,6 +14,7 @@ const navGroups = [
   { key: 'decide', items: [
     { href: '/portfolio', key: 'portfolio', icon: WalletCards },
     { href: '/simulator', key: 'simulator', icon: SlidersHorizontal },
+    { href: '/strategies', key: 'strategies', label: 'Confronto strategie', icon: ArrowRightLeft },
     { href: '/history', key: 'history', icon: History },
   ]},
   { key: 'control', items: [
@@ -38,7 +39,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const { signOut } = useClerk();
   const displayName = user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || t('shell.analyst');
   const initials = displayName.slice(0, 2).toUpperCase();
-  const navLabel = (key: string) => t(`nav.${key}` as Parameters<typeof t>[0]);
+  const navLabel = (item: { key: string; label?: string }) => item.label ?? t(`nav.${item.key}` as Parameters<typeof t>[0]);
   return <div className="app-shell">
     <aside className="app-sidebar">
       <div className="mb-9 flex items-center justify-between"><Logo /><span className="hidden rounded border border-primary/30 px-1.5 py-1 mono text-[9px] text-primary md:block">V7</span></div>
@@ -48,7 +49,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="space-y-1">{group.items.map((item) => {
             const Icon = item.icon;
             const active = item.href === '/' ? location === '/' : location.startsWith(item.href);
-            const label = navLabel(item.key);
+            const label = navLabel(item);
             return <Link key={item.href} href={item.href} className={`group flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-semibold no-underline transition ${active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`} data-testid={`link-nav-${item.key}`}>
               <Icon size={16} strokeWidth={active ? 2.5 : 1.8} /><span>{label}</span>{item.key === 'opportunities' && <span className={`ml-auto rounded-full px-1.5 py-0.5 mono text-[9px] ${active ? 'bg-background/20' : 'bg-accent/15 text-accent'}`}>04</span>}
             </Link>;
@@ -69,7 +70,7 @@ export function Shell({ children }: { children: ReactNode }) {
       {children}
     </main>
     <nav className="mobile-nav fixed bottom-0 left-0 right-0 z-10 hidden items-center justify-around border-t border-border bg-sidebar/95 p-2 backdrop-blur" aria-label="Mobile navigation">
-      {[navGroups[0].items[0], navGroups[0].items[2], navGroups[1].items[0], navGroups[2].items[0], navGroups[2].items[3]].map((item) => { const Icon = item.icon; const label = navLabel(item.key); return <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[9px] no-underline ${location === item.href ? 'text-primary' : 'text-muted-foreground'}`} data-testid={`link-mobile-${item.key}`}><Icon size={17} /><span>{label.split(' ')[0]}</span></Link>; })}
+      {[navGroups[0].items[0], navGroups[0].items[2], navGroups[1].items[0], navGroups[2].items[0], navGroups[2].items[3]].map((item) => { const Icon = item.icon; const label = navLabel(item); return <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[9px] no-underline ${location === item.href ? 'text-primary' : 'text-muted-foreground'}`} data-testid={`link-mobile-${item.key}`}><Icon size={17} /><span>{label.split(' ')[0]}</span></Link>; })}
     </nav>
   </div>;
 }

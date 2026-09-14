@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { ClerkProvider, Show, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
@@ -11,6 +11,7 @@ import NotFound from '@/pages/not-found';
 import { Shell } from '@/components/shell';
 import { I18nProvider, useI18n } from '@/lib/i18n';
 import { DashboardV71Page } from '@/pages/dashboard-v71';
+import { StrategyComparisonPage } from '@/pages/strategy-comparison';
 import { AssetPage, BacktestPage, HistoryPage, MarketsPage, NewsPage, OpportunitiesPage, PortfolioPage, RiskPage, SettingsPage, SimulatorPage, SystemPage } from '@/pages/platform';
 
 const queryClient = new QueryClient();
@@ -82,83 +83,7 @@ const clerkAppearance = {
 
 function LandingPage() {
   const { t } = useI18n();
-  const [, setLocation] = useLocation();
-  const [videoVisible, setVideoVisible] = useState(true);
-  const videoPreviewUrl = new URL('/trading-ai-platform-video-preview/', window.location.origin).toString();
-
-  const enterCockpit = () => {
-    setVideoVisible(false);
-    setLocation('/sign-in');
-  };
-
-  return (
-    <main className="min-h-[100dvh] bg-background px-5 py-8 md:py-12">
-      <div className="mx-auto w-full max-w-7xl">
-        <header className="mb-10 flex items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ActivityIcon /></span>
-            <div>
-              <p className="display text-lg font-bold text-foreground">VECTOR / AI</p>
-              <p className="mono text-[10px] uppercase tracking-[.2em] text-muted-foreground">paper cockpit</p>
-            </div>
-          </div>
-          <Link href="/sign-in" className="rounded-md border border-border px-4 py-2 text-sm font-bold text-foreground no-underline hover:border-primary/50" data-testid="link-sign-in">
-            {t('landing.signIn')}
-          </Link>
-        </header>
-
-        <div className="grid items-center gap-10 lg:grid-cols-[.78fr_1.22fr] lg:gap-16">
-          <div>
-            <p className="eyebrow mb-4 text-primary">{t('landing.eyebrow')}</p>
-            <h1 className="display max-w-2xl text-4xl font-bold leading-tight text-foreground md:text-6xl">{t('landing.title')}</h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">{t('landing.subtitle')}</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button type="button" onClick={enterCockpit} className="rounded-md bg-primary px-5 py-3 text-sm font-bold text-primary-foreground hover:brightness-110" data-testid="button-video-login">
-                {t('landing.videoLogin')}
-              </button>
-              <Link href="/sign-up" className="rounded-md border border-border px-5 py-3 text-sm font-bold text-foreground no-underline hover:border-primary/50" data-testid="link-sign-up">
-                {t('landing.signUp')}
-              </Link>
-            </div>
-            <div className="mt-10 flex items-center gap-3 border-t border-border pt-5">
-              <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_0_4px_hsl(var(--accent)/.15)]" />
-              <span className="mono text-[10px] tracking-[.2em] text-accent">{t('landing.paperOnly')}</span>
-              <span className="text-sm text-muted-foreground">{t('landing.description')}</span>
-            </div>
-          </div>
-
-          <div className="panel relative overflow-hidden border border-border/80 bg-secondary/20 p-2 shadow-2xl shadow-black/20">
-            <div className="relative aspect-video overflow-hidden rounded-lg bg-[#0e1521]">
-              {videoVisible && (
-                <iframe
-                  title="VECTOR / AI — Trading AI Platform V7 video preview"
-                  src={videoPreviewUrl}
-                  className="absolute inset-0 h-full w-full border-0"
-                  allow="autoplay"
-                  loading="eager"
-                />
-              )}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0e1521]/95 to-transparent" />
-              <button
-                type="button"
-                onClick={enterCockpit}
-                className="absolute bottom-4 left-4 rounded-md bg-primary px-4 py-3 text-left text-sm font-bold text-primary-foreground shadow-lg transition hover:brightness-110"
-                data-testid="button-video-login-overlay"
-              >
-                {t('landing.videoLogin')}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-12 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-md bg-secondary/60 p-4"><p className="eyebrow">01</p><p className="mt-2 text-sm text-muted-foreground">{t('nav.observe')}</p></div>
-          <div className="rounded-md bg-secondary/60 p-4"><p className="eyebrow">02</p><p className="mt-2 text-sm text-muted-foreground">{t('nav.decide')}</p></div>
-          <div className="rounded-md bg-secondary/60 p-4"><p className="eyebrow">03</p><p className="mt-2 text-sm text-muted-foreground">{t('nav.control')}</p></div>
-        </div>
-      </div>
-    </main>
-  );
+  return <main className="flex min-h-[100dvh] items-center justify-center bg-background px-5 py-12"><div className="w-full max-w-5xl"><div className="grid items-center gap-12 lg:grid-cols-[1.1fr_.9fr]"><div><div className="mb-8 flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ActivityIcon /></span><div><p className="display text-lg font-bold text-foreground">VECTOR / AI</p><p className="mono text-[10px] uppercase tracking-[.2em] text-muted-foreground">paper cockpit</p></div></div><p className="eyebrow mb-4 text-primary">{t('landing.eyebrow')}</p><h1 className="display max-w-2xl text-4xl font-bold leading-tight text-foreground md:text-6xl">{t('landing.title')}</h1><p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">{t('landing.subtitle')}</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/sign-in" className="rounded-md bg-primary px-5 py-3 text-sm font-bold text-primary-foreground no-underline hover:brightness-110" data-testid="link-sign-in">{t('landing.signIn')}</Link><Link href="/sign-up" className="rounded-md border border-border px-5 py-3 text-sm font-bold text-foreground no-underline hover:border-primary/50" data-testid="link-sign-up">{t('landing.signUp')}</Link></div></div><div className="panel p-6 md:p-8"><div className="mb-6 flex items-center justify-between"><span className="mono text-[10px] tracking-[.2em] text-accent">{t('landing.paperOnly')}</span><span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_0_4px_hsl(var(--accent)/.15)]" /></div><p className="text-lg font-semibold text-foreground">{t('landing.description')}</p><div className="mt-7 grid gap-3 sm:grid-cols-3"><div className="rounded-md bg-secondary/60 p-3"><p className="eyebrow">01</p><p className="mt-2 text-xs text-muted-foreground">{t('nav.observe')}</p></div><div className="rounded-md bg-secondary/60 p-3"><p className="eyebrow">02</p><p className="mt-2 text-xs text-muted-foreground">{t('nav.decide')}</p></div><div className="rounded-md bg-secondary/60 p-3"><p className="eyebrow">03</p><p className="mt-2 text-xs text-muted-foreground">{t('nav.control')}</p></div></div></div></div></div></main>;
 }
 
 function ActivityIcon() {
@@ -187,6 +112,7 @@ function AppRoutes() {
   return <Switch>
     <Route path="/" component={HomeRoute} />
     <Route path="/dashboard"><ProtectedArea><Shell><DashboardV71Page /></Shell></ProtectedArea></Route>
+    <Route path="/strategies"><ProtectedArea><Shell><StrategyComparisonPage /></Shell></ProtectedArea></Route>
     <Route path="/markets"><ProtectedArea><Shell><MarketsPage /></Shell></ProtectedArea></Route>
     <Route path="/assets/:symbol"><ProtectedArea><Shell><AssetPage /></Shell></ProtectedArea></Route>
     <Route path="/opportunities"><ProtectedArea><Shell><OpportunitiesPage /></Shell></ProtectedArea></Route>
