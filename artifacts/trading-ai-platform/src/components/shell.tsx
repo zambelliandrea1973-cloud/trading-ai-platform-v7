@@ -1,4 +1,4 @@
-import { Activity, ArrowRightLeft, BarChart3, Cpu, History, LayoutDashboard, LineChart, LogOut, Newspaper, Radar, Settings, ShieldCheck, SlidersHorizontal, WalletCards, X } from 'lucide-react';
+import { Activity, ArrowRightLeft, BarChart3, Cpu, History, LayoutDashboard, LineChart, LogOut, Newspaper, Radar, Settings, ShieldCheck, SlidersHorizontal, ToggleLeft, WalletCards, X } from 'lucide-react';
 import { useClerk, useUser } from '@clerk/react';
 import { Link, useLocation } from 'wouter';
 import { type ReactNode } from 'react';
@@ -19,6 +19,7 @@ const navGroups = [
   ]},
   { key: 'control', items: [
     { href: '/risk', key: 'risk', icon: ShieldCheck },
+    { href: '/strategy-control', key: 'strategyControl', label: 'Modalità operative', icon: ToggleLeft },
     { href: '/backtest', key: 'backtest', icon: BarChart3 },
     { href: '/system', key: 'system', icon: Cpu },
     { href: '/settings', key: 'settings', icon: Settings },
