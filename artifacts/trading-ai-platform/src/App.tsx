@@ -12,6 +12,7 @@ import { Shell } from '@/components/shell';
 import { I18nProvider, useI18n } from '@/lib/i18n';
 import { DashboardV71Page } from '@/pages/dashboard-v71';
 import { StrategyComparisonPage } from '@/pages/strategy-comparison';
+import { StrategyControlPage } from '@/pages/strategy-control';
 import { AssetPage, BacktestPage, HistoryPage, MarketsPage, NewsPage, OpportunitiesPage, PortfolioPage, RiskPage, SettingsPage, SimulatorPage, SystemPage } from '@/pages/platform';
 
 const queryClient = new QueryClient();
@@ -113,6 +114,7 @@ function AppRoutes() {
     <Route path="/" component={HomeRoute} />
     <Route path="/dashboard"><ProtectedArea><Shell><DashboardV71Page /></Shell></ProtectedArea></Route>
     <Route path="/strategies"><ProtectedArea><Shell><StrategyComparisonPage /></Shell></ProtectedArea></Route>
+    <Route path="/strategy-control"><ProtectedArea><Shell><StrategyControlPage /></Shell></ProtectedArea></Route>
     <Route path="/markets"><ProtectedArea><Shell><MarketsPage /></Shell></ProtectedArea></Route>
     <Route path="/assets/:symbol"><ProtectedArea><Shell><AssetPage /></Shell></ProtectedArea></Route>
     <Route path="/opportunities"><ProtectedArea><Shell><OpportunitiesPage /></Shell></ProtectedArea></Route>
