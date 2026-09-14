@@ -5,6 +5,7 @@ import brokerRouter from "./broker";
 import fundamentalsRouter from "./fundamentals";
 import decisionRouter from "./decision";
 import v72Router from "./v72";
+import strategyControlRouter from "./strategy-control";
 import { requireAuth } from "../middlewares/require-auth";
 
 const router: IRouter = Router();
@@ -15,6 +16,7 @@ router.use(tradingRouter);
 router.use(fundamentalsRouter);
 router.use(decisionRouter);
 router.use(v72Router);
+router.use(strategyControlRouter);
 router.use(brokerRouter);
 
 export default router;
