@@ -1,5 +1,6 @@
 import { evaluateFundamentals, type FundamentalInput } from "./fundamentalBrain";
 import { evaluateStatistical, type StatisticalInput } from "./statisticalBrain";
+import { evaluateInstitutionalContext, type InstitutionalContextInput } from "./institutionalContext";
 
 export type TradingHorizon = "intraday" | "swing" | "position";
 
@@ -29,6 +30,8 @@ export type MasterDecisionInput = {
   fundamentals?: FundamentalInput | null;
   statistical?: StatisticalInput | null;
   safety?: SafetyContext | null;
+  /** Recorded for comparison only. It cannot affect decision or size while mode is SHADOW. */
+  institutionalContext?: InstitutionalContextInput | null;
 };
 
 export type MasterDecisionResult = {
@@ -43,6 +46,7 @@ export type MasterDecisionResult = {
   brainScores: Record<string, number | null>;
   fundamental: ReturnType<typeof evaluateFundamentals> | null;
   statistical: ReturnType<typeof evaluateStatistical> | null;
+  institutionalContext: ReturnType<typeof evaluateInstitutionalContext> | null;
   rationale: string;
 };
 
@@ -141,6 +145,7 @@ function evaluateSafety(safety: SafetyContext | null | undefined) {
 export function evaluateMasterDecision(input: MasterDecisionInput): MasterDecisionResult {
   const fundamental = input.fundamentals ? evaluateFundamentals(input.fundamentals) : null;
   const statistical = input.statistical ? evaluateStatistical(input.statistical) : null;
+  const institutionalContext = input.institutionalContext ? evaluateInstitutionalContext(input.institutionalContext) : null;
   const baseWeights = weightsByHorizon[input.horizon];
 
   const candidates = [
@@ -163,6 +168,7 @@ export function evaluateMasterDecision(input: MasterDecisionInput): MasterDecisi
       brainScores: { technical: null, macroNews: null, fundamental: fundamental?.score ?? null, statistical: statistical?.score ?? null },
       fundamental,
       statistical,
+      institutionalContext,
       rationale: "Il sistema attende dati sufficienti invece di forzare un'operazione.",
     };
   }
@@ -201,6 +207,7 @@ export function evaluateMasterDecision(input: MasterDecisionInput): MasterDecisi
       },
       fundamental,
       statistical,
+      institutionalContext,
       rationale: "Il segnale può essere valido, ma un limite hard di sicurezza impedisce l'esecuzione.",
     };
   }
@@ -237,6 +244,7 @@ export function evaluateMasterDecision(input: MasterDecisionInput): MasterDecisi
     },
     fundamental,
     statistical,
+    institutionalContext,
     rationale: decision === "BUY"
       ? "Convergenza positiva dei cervelli disponibili; le cautele riducono la size prima di bloccare l'opportunità."
       : decision === "SELL"
