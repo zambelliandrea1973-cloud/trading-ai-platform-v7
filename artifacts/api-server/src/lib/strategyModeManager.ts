@@ -79,6 +79,10 @@ export class StrategyModeManager {
     const profiles = await this.list(userId, broker);
     const profile = profiles.find((item) => item.strategy === strategy)!;
     if (requestedMode === "LIVE" && !profile.liveEligible) return { updated: false, profile, error: "LIVE non autorizzato.", blockers: profile.liveBlockers };
+    const ownedLocks = await db.select().from(instrumentLocksTable).where(and(eq(instrumentLocksTable.userId, userId), eq(instrumentLocksTable.ownerStrategy, strategy))).limit(1);
+    if (ownedLocks.length && requestedMode !== profile.mode) {
+      return { updated: false, profile, error: "Modalità non modificabile durante un'operazione attiva.", blockers: ["Chiudere la posizione e attendere la conferma MT5."] };
+    }
     const [row] = await db.insert(strategyModesTable).values({ userId, strategy, mode: requestedMode, experimentPassed: profile.experimentPassed, completedSamples: profile.completedSamples, updatedAt: new Date() }).onConflictDoUpdate({ target: [strategyModesTable.userId, strategyModesTable.strategy], set: { mode: requestedMode, updatedAt: new Date() } }).returning();
     return { updated: true, row };
   }
