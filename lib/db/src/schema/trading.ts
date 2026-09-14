@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, jsonb, boolean, integer, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -56,3 +56,26 @@ export type InsertDecisionMemory = z.infer<typeof insertDecisionMemorySchema>;
 export type MarketSnapshot = typeof marketSnapshotsTable.$inferSelect;
 export type PaperAnalysis = typeof paperAnalysesTable.$inferSelect;
 export type DecisionMemory = typeof decisionMemoryTable.$inferSelect;
+
+
+export const strategyModesTable = pgTable("strategy_modes", {
+  userId: text("user_id").notNull(),
+  strategy: text("strategy").notNull(),
+  mode: text("mode").notNull().default("DEMO"),
+  experimentPassed: boolean("experiment_passed").notNull().default(false),
+  completedSamples: integer("completed_samples").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [primaryKey({ columns: [table.userId, table.strategy] })]);
+
+export const instrumentLocksTable = pgTable("instrument_locks", {
+  userId: text("user_id").notNull(),
+  canonicalSymbol: text("canonical_symbol").notNull(),
+  ownerStrategy: text("owner_strategy").notNull(),
+  runMode: text("run_mode").notNull(),
+  direction: text("direction").notNull(),
+  externalPositionId: text("external_position_id"),
+  status: text("status").notNull(),
+  acquiredAt: timestamp("acquired_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastBrokerConfirmationAt: timestamp("last_broker_confirmation_at", { withTimezone: true }),
+}, (table) => [primaryKey({ columns: [table.userId, table.canonicalSymbol] })]);
