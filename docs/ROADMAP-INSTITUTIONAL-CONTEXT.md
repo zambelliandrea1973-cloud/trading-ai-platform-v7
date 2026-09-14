@@ -82,3 +82,27 @@ COT_MAX_AGE_HOURS=192
 - nessuna regressione su Master Engine;
 - persistenza delle tre strategie e dei checkpoint;
 - report shadow riproducibile prima di qualunque promozione.
+
+
+## Modalità operative e protezione interferenze
+
+- `SCALP`: M1/M5, durata massima 15 minuti, rischio iniziale 0,20%, spread massimo 1,35x, slippage massimo 0,08R.
+- `INTRADAY`: M5/M15/M30/H1, chiusura entro 12 ore, rischio iniziale 0,35%.
+- `SWING`: H1/H4/D1, durata massima 7 giorni, rischio iniziale 0,50%.
+- ogni strategia può essere `OFF`, `DEMO` o `LIVE`;
+- `LIVE` rimane bloccato finché campione, approvazione esperimento, MT5, execution flag e persistenza non risultano tutti validi;
+- il primo motore che acquisisce un simbolo ottiene un lock esclusivo globale;
+- gli altri motori continuano l'analisi shadow ma non possono inviare ordini;
+- il lock si libera soltanto dopo conferma di chiusura dal broker;
+- ogni lock possiede una scadenza di sicurezza, ma la scadenza non autorizza automaticamente un nuovo ordine: serve riconciliazione MT5.
+
+### Passaggi deployment
+
+1. In Replit eseguire `pnpm --filter @workspace/db push` per creare `strategy_modes` e `instrument_locks`.
+2. Eseguire `pnpm run typecheck`.
+3. Eseguire `pnpm --filter @workspace/api-server test`.
+4. Pubblicare inizialmente con `LIVE_EXECUTION_ENABLED=false`.
+5. Verificare il pannello **Modalità operative** e provare OFF/DEMO.
+6. Simulare due acquisizioni contemporanee dello stesso simbolo e confermare che una riceva HTTP 409.
+7. Collegare la creazione/chiusura ordini del bridge agli endpoint lock.
+8. Solo dopo i criteri sperimentali, revisione umana e audit completo valutare `LIVE_EXECUTION_ENABLED=true`.
