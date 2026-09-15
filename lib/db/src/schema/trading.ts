@@ -1,4 +1,5 @@
-import { pgTable, serial, text, numeric, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, serial, text, numeric, timestamp, jsonb, boolean, integer, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -56,3 +57,64 @@ export type InsertDecisionMemory = z.infer<typeof insertDecisionMemorySchema>;
 export type MarketSnapshot = typeof marketSnapshotsTable.$inferSelect;
 export type PaperAnalysis = typeof paperAnalysesTable.$inferSelect;
 export type DecisionMemory = typeof decisionMemoryTable.$inferSelect;
+
+/**
+ * Per-user controls are deliberately separate from strategy modes.  A user
+ * can turn a strategy off or on without changing the account-wide risk
+ * budget.  Consumers must apply this same row to every strategy and mode.
+ */
+export const userRiskControlsTable = pgTable("user_risk_controls", {
+  userId: text("user_id").notNull(),
+  maxRiskPerTradePct: numeric("max_risk_per_trade_pct", { precision: 6, scale: 3 }).notNull().default("0.50"),
+  maxDailyLossPct: numeric("max_daily_loss_pct", { precision: 6, scale: 3 }).notNull().default("2.00"),
+  maxOpenExposurePct: numeric("max_open_exposure_pct", { precision: 6, scale: 3 }).notNull().default("5.00"),
+  maxConcurrentPositions: integer("max_concurrent_positions").notNull().default(3),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId] }),
+  check("user_risk_controls_positive", sql`max_risk_per_trade_pct > 0 AND max_daily_loss_pct > 0 AND max_open_exposure_pct > 0 AND max_concurrent_positions > 0`),
+]);
+
+export const strategyModesTable = pgTable("strategy_modes", {
+  userId: text("user_id").notNull(),
+  strategy: text("strategy").notNull(),
+  mode: text("mode").notNull().default("DEMO"),
+  experimentPassed: boolean("experiment_passed").notNull().default(false),
+  completedSamples: integer("completed_samples").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.strategy] }),
+  check("strategy_modes_strategy_valid", sql`strategy IN ('SCALP', 'INTRADAY', 'SWING')`),
+  check("strategy_modes_mode_valid", sql`mode IN ('OFF', 'DEMO', 'LIVE')`),
+]);
+
+/**
+ * This is a user-level lock, not a strategy-level lock.  The composite key
+ * prevents SCALP, INTRADAY, and SWING from claiming the same normalized
+ * instrument, including under concurrent requests.
+ */
+export const instrumentLocksTable = pgTable("instrument_locks", {
+  userId: text("user_id").notNull(),
+  canonicalSymbol: text("canonical_symbol").notNull(),
+  ownerStrategy: text("owner_strategy").notNull(),
+  runMode: text("run_mode").notNull(),
+  direction: text("direction").notNull(),
+  externalPositionId: text("external_position_id"),
+  status: text("status").notNull(),
+  acquiredAt: timestamp("acquired_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastBrokerConfirmationAt: timestamp("last_broker_confirmation_at", { withTimezone: true }),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.canonicalSymbol] }),
+  check("instrument_locks_strategy_valid", sql`owner_strategy IN ('SCALP', 'INTRADAY', 'SWING')`),
+  check("instrument_locks_mode_valid", sql`run_mode IN ('DEMO', 'LIVE')`),
+  check("instrument_locks_direction_valid", sql`direction IN ('BUY', 'SELL')`),
+  check("instrument_locks_status_valid", sql`status IN ('PENDING', 'OPEN', 'CLOSING')`),
+]);
+
+export const insertUserRiskControlsSchema = createInsertSchema(userRiskControlsTable).omit({ updatedAt: true });
+export const insertStrategyModeSchema = createInsertSchema(strategyModesTable).omit({ updatedAt: true });
+export const insertInstrumentLockSchema = createInsertSchema(instrumentLocksTable).omit({ acquiredAt: true, lastBrokerConfirmationAt: true });
+export type InsertUserRiskControls = z.infer<typeof insertUserRiskControlsSchema>;
+export type InsertStrategyMode = z.infer<typeof insertStrategyModeSchema>;
+export type InsertInstrumentLock = z.infer<typeof insertInstrumentLockSchema>;

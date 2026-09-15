@@ -21,7 +21,7 @@ import {
   type BrokerAuditEvent,
 } from "../src/lib/broker/contract";
 import { Mt5BridgeAdapter } from "../src/lib/broker/mt5-bridge-adapter";
-import { createBrokerRouter } from "../src/routes/broker";
+import { createBrokerRouter, createMt5HeartbeatRouter } from "../src/routes/broker";
 
 const BRIDGE_ENV = {
   MT5_BRIDGE_URL: "https://bridge.example.test",
@@ -95,6 +95,39 @@ async function withRouter<T>(
     nextServer.listen(0, "127.0.0.1", () => resolve(nextServer));
   });
 
+  try {
+    const address = server.address();
+    assert(address && typeof address !== "string");
+    return await callback(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
+async function withProductionRouteOrder<T>(
+  adapter: Mt5BridgeAdapter,
+  env: Record<string, string | undefined>,
+  callback: (baseUrl: string) => Promise<T>,
+): Promise<T> {
+  const app = express();
+  app.use(express.json());
+  app.use("/api", createMt5HeartbeatRouter({ adapter, env }));
+  app.use("/api", (req, res, next) => {
+    if (req.header("x-test-user-session") === "authenticated") {
+      next();
+      return;
+    }
+    res.status(401).json({ error: "Authentication required" });
+  });
+  app.use("/api", createBrokerRouter({ adapter, env }));
+
+  const server = await new Promise<Server>((resolve, reject) => {
+    const nextServer = createServer(app);
+    nextServer.once("error", reject);
+    nextServer.listen(0, "127.0.0.1", () => resolve(nextServer));
+  });
   try {
     const address = server.address();
     assert(address && typeof address !== "string");
@@ -540,9 +573,28 @@ test("authenticated MT5 heartbeat returns the generated void response", async ()
   const repository = new MemoryAuditRepository();
   const adapter = configuredAdapter(repository, bridgeFetch([]));
 
-  await withRouter(
-    adapter,
-    { MT5_BRIDGE_ALLOWED_IPS: "127.0.0.1,::ffff:127.0.0.1" },
+  const withHeartbeatRouter = async <T>(callback: (baseUrl: string) => Promise<T>) => {
+    const app = express();
+    app.use(express.json());
+    app.use("/api", createMt5HeartbeatRouter({
+      adapter,
+      env: { MT5_BRIDGE_ALLOWED_IPS: "127.0.0.1,::ffff:127.0.0.1" },
+    }));
+    const server = await new Promise<Server>((resolve, reject) => {
+      const nextServer = createServer(app);
+      nextServer.once("error", reject);
+      nextServer.listen(0, "127.0.0.1", () => resolve(nextServer));
+    });
+    try {
+      const address = server.address();
+      assert(address && typeof address !== "string");
+      return await callback(`http://127.0.0.1:${address.port}`);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  };
+
+  await withHeartbeatRouter(
     async (baseUrl) => {
       const response = await fetch(`${baseUrl}/api/broker/mt5/heartbeat`, {
         method: "POST",
@@ -562,4 +614,41 @@ test("authenticated MT5 heartbeat returns the generated void response", async ()
       assert.equal(await response.text(), "");
     },
   );
+});
+
+test("production route order allows key-only heartbeat but protects every broker read", async () => {
+  const repository = new MemoryAuditRepository();
+  const adapter = configuredAdapter(repository, bridgeFetch([]));
+  const env = {
+    ...READ_ENV,
+    MT5_BRIDGE_ALLOWED_IPS: "127.0.0.1,::ffff:127.0.0.1",
+  };
+
+  await withProductionRouteOrder(adapter, env, async (baseUrl) => {
+    const heartbeat = await fetch(`${baseUrl}/api/broker/mt5/heartbeat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-mt5-bridge-key": "bridge-secret",
+      },
+      body: JSON.stringify({
+        status: "healthy",
+        heartbeatAt: NOW.toISOString(),
+        bridgeVersion: "1.2.3",
+      }),
+    });
+    assert.equal(heartbeat.status, 204);
+
+    for (const route of ["status", "quotes", "account", "positions", "history"]) {
+      const response = await fetch(`${baseUrl}/api/broker/${route}`, {
+        headers: { "x-broker-read-key": "read-secret" },
+      });
+      assert.equal(response.status, 401, route);
+    }
+
+    const authenticatedStatus = await fetch(`${baseUrl}/api/broker/status`, {
+      headers: { "x-test-user-session": "authenticated" },
+    });
+    assert.equal(authenticatedStatus.status, 200);
+  });
 });

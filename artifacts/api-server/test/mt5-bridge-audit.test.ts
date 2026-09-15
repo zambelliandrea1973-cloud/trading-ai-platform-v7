@@ -9,7 +9,7 @@ import {
   type BridgeAuditRepository,
 } from "../src/lib/broker/audit-store";
 import { Mt5BridgeAdapter } from "../src/lib/broker/mt5-bridge-adapter";
-import { createBrokerRouter } from "../src/routes/broker";
+import { createBrokerRouter, createMt5HeartbeatRouter } from "../src/routes/broker";
 
 const BRIDGE_ENV = {
   MT5_BRIDGE_URL: "https://bridge.example.test",
@@ -88,6 +88,7 @@ async function withRouter<T>(
 ): Promise<T> {
   const app = express();
   app.use(express.json());
+  app.use("/api", createMt5HeartbeatRouter({ adapter, env }));
   app.use("/api", createBrokerRouter({ adapter, env }));
 
   const server = await new Promise<Server>((resolve, reject) => {

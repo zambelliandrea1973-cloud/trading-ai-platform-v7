@@ -22,6 +22,58 @@ export interface BrokerRouterOptions {
   env?: Record<string, string | undefined>;
 }
 
+export function createMt5HeartbeatRouter({
+  adapter = mt5BridgeAdapter,
+  env = process.env,
+}: BrokerRouterOptions = {}): IRouter {
+  const router: IRouter = Router();
+
+  router.post("/broker/mt5/heartbeat", async (req, res): Promise<void> => {
+    const presentedKey = req.header("x-mt5-bridge-key");
+    const configuredKey = adapter.getApiKey();
+    if (!presentedKey || !configuredKey || !secureCompare(presentedKey, configuredKey)) {
+      await adapter.recordSecurityEvent(
+        "heartbeat.rejected",
+        "Bridge authentication failed; bridge key was rejected.",
+      );
+      res.status(401).json({ error: "Bridge authentication required." });
+      return;
+    }
+    if (!isAllowedIp(req.ip, env["MT5_BRIDGE_ALLOWED_IPS"])) {
+      await adapter.recordSecurityEvent(
+        "heartbeat.rejected",
+        "Bridge network was not allowlisted.",
+      );
+      res.status(403).json({ error: "Bridge network is not allowlisted." });
+      return;
+    }
+    const body = SubmitMt5HeartbeatBody.safeParse(req.body);
+    if (!body.success) {
+      await adapter.recordSecurityEvent(
+        "heartbeat.rejected",
+        "Bridge heartbeat payload was invalid.",
+      );
+      res.status(400).json({ error: body.error.message });
+      return;
+    }
+
+    try {
+      await adapter.receiveHeartbeat(body.data);
+      res.status(204).send();
+    } catch (error: unknown) {
+      await adapter.recordSecurityEvent(
+        "heartbeat.rejected",
+        error instanceof Error ? error.message : "Heartbeat rejected.",
+      );
+      res.status(error instanceof BrokerProtocolError ? 400 : 503).json({
+        error: error instanceof Error ? error.message : "Heartbeat rejected.",
+      });
+    }
+  });
+
+  return router;
+}
+
 export function createBrokerRouter({
   adapter = mt5BridgeAdapter,
   env = process.env,
@@ -97,49 +149,6 @@ export function createBrokerRouter({
     await respondWithBrokerData(res, adapter, "history", () =>
       adapter.getHistory(from, to).then((data) => GetBrokerHistoryResponse.parse(data)),
     );
-  });
-
-  router.post("/broker/mt5/heartbeat", async (req, res): Promise<void> => {
-    const presentedKey = req.header("x-mt5-bridge-key");
-    const configuredKey = adapter.getApiKey();
-    if (!presentedKey || !configuredKey || !secureCompare(presentedKey, configuredKey)) {
-      await adapter.recordSecurityEvent(
-        "heartbeat.rejected",
-        "Bridge authentication failed; bridge key was rejected.",
-      );
-      res.status(401).json({ error: "Bridge authentication required." });
-      return;
-    }
-    if (!isAllowedIp(req.ip, env["MT5_BRIDGE_ALLOWED_IPS"])) {
-      await adapter.recordSecurityEvent(
-        "heartbeat.rejected",
-        "Bridge network was not allowlisted.",
-      );
-      res.status(403).json({ error: "Bridge network is not allowlisted." });
-      return;
-    }
-    const body = SubmitMt5HeartbeatBody.safeParse(req.body);
-    if (!body.success) {
-      await adapter.recordSecurityEvent(
-        "heartbeat.rejected",
-        "Bridge heartbeat payload was invalid.",
-      );
-      res.status(400).json({ error: body.error.message });
-      return;
-    }
-
-    try {
-      await adapter.receiveHeartbeat(body.data);
-      res.status(204).send();
-    } catch (error: unknown) {
-      await adapter.recordSecurityEvent(
-        "heartbeat.rejected",
-        error instanceof Error ? error.message : "Heartbeat rejected.",
-      );
-      res.status(error instanceof BrokerProtocolError ? 400 : 503).json({
-        error: error instanceof Error ? error.message : "Heartbeat rejected.",
-      });
-    }
   });
 
   return router;
@@ -232,4 +241,5 @@ function secureCompare(left: string, right: string): boolean {
   return different === 0;
 }
 
+export const mt5HeartbeatRouter = createMt5HeartbeatRouter();
 export default createBrokerRouter();
