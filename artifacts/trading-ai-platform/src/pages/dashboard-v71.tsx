@@ -116,12 +116,12 @@ export function DashboardV71Page() {
           <Badge tone="neutral">PAPER</Badge>
           <Badge tone={systemHealthy ? 'positive' : 'negative'}><Wifi size={11} /> Sistema {systemHealthy ? 'operativo' : 'degradato'}</Badge>
           <Badge tone="positive"><ShieldCheck size={11} /> Sentinel attivo</Badge>
-          <Badge tone="teal"><Brain size={11} /> 5 cervelli operativi</Badge>
+          <Badge tone="teal"><Brain size={11} /> AI ATTIVA</Badge>
         </div>
         <div className="mono text-[10px] text-muted-foreground">RISK {dashboard.riskScore}/100 · DD {dashboard.drawdown}% · ESP. {dashboard.exposure}%</div>
       </div>
       <div className="mt-3 grid grid-cols-5 gap-2">
-        {[1, 2, 3, 4, 5].map((brain) => <div key={brain} className="rounded-md border border-border bg-background/50 px-3 py-2 text-center"><div className="mx-auto mb-1 h-2 w-2 rounded-full bg-accent" /><span className="mono text-[9px] text-muted-foreground">CERVELLO {brain}</span></div>)}
+        {['Analisi tecnica', 'Fondamentali', 'Macro', 'News', 'Rischio'].map((label) => <div key={label} className="rounded-md border border-border bg-background/50 px-3 py-2 text-center"><div className="mx-auto mb-1 h-2 w-2 rounded-full bg-accent" /><span className="mono text-[9px] text-muted-foreground">{label}</span></div>)}
       </div>
     </section>
 
@@ -129,7 +129,7 @@ export function DashboardV71Page() {
       <StatusCard label="1 · Sta funzionando?" value={systemHealthy ? 'SÌ' : 'ATTENZIONE'} detail={systemHealthy ? 'Servizi disponibili e controllo attivo.' : 'Controllare lo stato sistema.'} tone={systemHealthy ? 'teal' : 'red'} />
       <StatusCard label="2 · Sta tradando?" value={buyDecision ? 'VALUTA BUY' : 'IN ATTESA'} detail={buyDecision ? `${buyDecision.symbol} · decisione PAPER` : 'Nessun acquisto attivo in questo momento.'} tone={buyDecision ? 'amber' : 'teal'} />
       <StatusCard label="3 · Cosa sta facendo?" value={buyDecision ? buyDecision.symbol : 'MONITORA'} detail={buyDecision ? 'Preparazione proposta di acquisto simulata.' : 'Scansione mercati e opportunità.'} tone={buyDecision ? 'amber' : 'teal'} />
-      <StatusCard label="4 · Perché?" value={buyDecision ? `${buyDecision.confidence}%` : 'NESSUN BUY'} detail={buyDecision?.rationale ?? 'I 5 cervelli non hanno prodotto una decisione di acquisto.'} tone={buyDecision ? 'amber' : 'teal'} />
+      <StatusCard label="4 · Perché?" value={buyDecision ? `${buyDecision.confidence}%` : 'NESSUN BUY'} detail={buyDecision?.rationale ?? 'L’AI non ha prodotto una decisione di acquisto.'} tone={buyDecision ? 'amber' : 'teal'} />
       <StatusCard label="5 · Quanto rischia?" value={`${dashboard.riskScore}/100`} detail={`Drawdown ${dashboard.drawdown}% · esposizione ${dashboard.exposure}%`} tone={dashboard.riskScore >= 65 ? 'red' : dashboard.riskScore >= 45 ? 'amber' : 'teal'} />
     </div>
 
@@ -139,7 +139,7 @@ export function DashboardV71Page() {
         <Badge tone="amber">PAPER · CONFIDENZA {buyDecision.confidence}%</Badge>
       </div>
       <div className="grid gap-3 sm:grid-cols-4">
-        <div className="rounded-md bg-secondary/45 p-3"><p className="eyebrow">Consenso</p><p className="mono mt-1 text-sm text-accent">5 cervelli</p></div>
+        <div className="rounded-md bg-secondary/45 p-3"><p className="eyebrow">Consenso</p><p className="mono mt-1 text-sm text-accent">AI attiva</p></div>
         <div className="rounded-md bg-secondary/45 p-3"><p className="eyebrow">Rischio</p><p className="mono mt-1 text-sm text-primary">{buyDecision.risk}</p></div>
         <div className="rounded-md bg-secondary/45 p-3"><p className="eyebrow">Stato</p><p className="mono mt-1 text-sm text-foreground">{buyDecision.state}</p></div>
         <div className="rounded-md bg-secondary/45 p-3"><p className="eyebrow">Esecuzione</p><p className="mono mt-1 text-sm text-accent">SOLO SIMULATA</p></div>
@@ -181,6 +181,6 @@ export function DashboardV71Page() {
       <section><SectionLabel aside={<PageButton href="/opportunities">Vedi classifica</PageButton>}>Decisioni principali</SectionLabel><div className="grid gap-3 sm:grid-cols-2">{opportunities.slice(0, 4).map((opportunity, index) => <OpportunityCard opportunity={opportunity} index={index} key={opportunity.symbol} />)}</div></section>
     </div>
 
-    <Notice tone="teal"><span><strong>Ambiente simulato.</strong> La dashboard V7.1 non abilita esecuzione live e non modifica la logica dei 5 cervelli.</span></Notice>
+    <Notice tone="teal"><span><strong>Ambiente simulato.</strong> La dashboard V7.1 non abilita esecuzione live e non modifica la logica interna dell’AI.</span></Notice>
   </div>;
 }

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef } from 'react';
-import { ClerkProvider, Show, SignIn, SignUp, useClerk } from '@clerk/react';
+import { ClerkLoaded, ClerkLoading, ClerkProvider, Show, SignIn, SignUp, useClerk } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const dashboardUrl = `${basePath}/dashboard`;
 
 function stripBase(path: string) {
   return basePath && path.startsWith(basePath)
@@ -90,17 +91,70 @@ function ActivityIcon() {
   return <span className="text-lg">⌁</span>;
 }
 
+function AuthLoading() {
+  return <main className="flex min-h-[100dvh] items-center justify-center bg-background px-5">
+    <div className="text-center">
+      <span className="mx-auto block h-7 w-7 animate-spin rounded-full border-2 border-border border-t-primary" />
+      <p className="mt-4 text-sm text-muted-foreground">Accesso sicuro in corso…</p>
+    </div>
+  </main>;
+}
+
 function ProtectedArea({ children }: { children: ReactNode }) {
   return <>
-    <Show when="signed-in">{children}</Show>
-    <Show when="signed-out"><Redirect to="/sign-in" /></Show>
+    <ClerkLoading><AuthLoading /></ClerkLoading>
+    <ClerkLoaded>
+      <Show when="signed-in">{children}</Show>
+      <Show when="signed-out"><Redirect to="/sign-in" /></Show>
+    </ClerkLoaded>
   </>;
 }
 
 function HomeRoute() {
   return <>
-    <Show when="signed-in"><Redirect to="/dashboard" /></Show>
-    <Show when="signed-out"><LandingPage /></Show>
+    <ClerkLoading><AuthLoading /></ClerkLoading>
+    <ClerkLoaded>
+      <Show when="signed-in"><Redirect to="/dashboard" /></Show>
+      <Show when="signed-out"><LandingPage /></Show>
+    </ClerkLoaded>
+  </>;
+}
+
+function SignInRoute() {
+  return <>
+    <ClerkLoading><AuthLoading /></ClerkLoading>
+    <ClerkLoaded>
+      <Show when="signed-in"><Redirect to="/dashboard" /></Show>
+      <Show when="signed-out">
+        <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-8">
+          <SignIn
+            routing="path"
+            path={`${basePath}/sign-in`}
+            signUpUrl={`${basePath}/sign-up`}
+            fallbackRedirectUrl={dashboardUrl}
+          />
+        </div>
+      </Show>
+    </ClerkLoaded>
+  </>;
+}
+
+function SignUpRoute() {
+  return <>
+    <ClerkLoading><AuthLoading /></ClerkLoading>
+    <ClerkLoaded>
+      <Show when="signed-in"><Redirect to="/dashboard" /></Show>
+      <Show when="signed-out">
+        <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-8">
+          <SignUp
+            routing="path"
+            path={`${basePath}/sign-up`}
+            signInUrl={`${basePath}/sign-in`}
+            fallbackRedirectUrl={dashboardUrl}
+          />
+        </div>
+      </Show>
+    </ClerkLoaded>
   </>;
 }
 
@@ -157,8 +211,8 @@ function ClerkApp() {
     <QueryClientProvider client={queryClient}>
       <ClerkQueryClientCacheInvalidator />
       <Switch>
-        <Route path="/sign-in/*?" component={() => <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-8"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></div>} />
-        <Route path="/sign-up/*?" component={() => <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-8"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div>} />
+        <Route path="/sign-in/*?" component={SignInRoute} />
+        <Route path="/sign-up/*?" component={SignUpRoute} />
         <Route component={AppRoutes} />
       </Switch>
     </QueryClientProvider>
