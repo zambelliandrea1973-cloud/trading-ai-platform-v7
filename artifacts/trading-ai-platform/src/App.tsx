@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef } from 'react';
-import { ClerkProvider, Show, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
+import { ClerkProvider, Show, SignIn, SignUp, useClerk } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -90,22 +90,18 @@ function ActivityIcon() {
   return <span className="text-lg">⌁</span>;
 }
 
-function AuthLoading() {
-  const { t } = useI18n();
-  return <main className="flex min-h-[100dvh] items-center justify-center bg-background"><div className="mono text-xs text-muted-foreground">{t('system.checking')}</div></main>;
-}
-
 function ProtectedArea({ children }: { children: ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <AuthLoading />;
-  if (!isSignedIn) return <Redirect to="/sign-in" />;
-  return <>{children}</>;
+  return <>
+    <Show when="signed-in">{children}</Show>
+    <Show when="signed-out"><Redirect to="/sign-in" /></Show>
+  </>;
 }
 
 function HomeRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <AuthLoading />;
-  return isSignedIn ? <Redirect to="/dashboard" /> : <LandingPage />;
+  return <>
+    <Show when="signed-in"><Redirect to="/dashboard" /></Show>
+    <Show when="signed-out"><LandingPage /></Show>
+  </>;
 }
 
 function AppRoutes() {
