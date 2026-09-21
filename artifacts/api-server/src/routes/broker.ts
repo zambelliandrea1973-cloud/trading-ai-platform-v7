@@ -16,9 +16,14 @@ import {
   Mt5BridgeAdapter,
   mt5BridgeAdapter,
 } from "../lib/broker/mt5-bridge-adapter";
+import {
+  AxiMcpShadowAdapter,
+  axiMcpShadowAdapter,
+} from "../lib/broker/axi-mcp-shadow-adapter";
 
 export interface BrokerRouterOptions {
   adapter?: Mt5BridgeAdapter;
+  axiMcpAdapter?: AxiMcpShadowAdapter;
   env?: Record<string, string | undefined>;
 }
 
@@ -76,6 +81,7 @@ export function createMt5HeartbeatRouter({
 
 export function createBrokerRouter({
   adapter = mt5BridgeAdapter,
+  axiMcpAdapter = axiMcpShadowAdapter,
   env = process.env,
 }: BrokerRouterOptions = {}): IRouter {
   const router: IRouter = Router();
@@ -84,6 +90,14 @@ export function createBrokerRouter({
     await respondWithBrokerData(res, undefined, undefined, () =>
       adapter.getStatus().then((status) => GetBrokerStatusResponse.parse(status)),
     );
+  });
+
+  router.get("/broker/axi-mcp/status", async (_req, res): Promise<void> => {
+    try {
+      res.json(await axiMcpAdapter.getStatus());
+    } catch {
+      res.status(500).json({ error: "Unexpected Axi MCP shadow adapter error." });
+    }
   });
 
   router.get("/broker/quotes", async (req, res): Promise<void> => {
