@@ -1,19 +1,48 @@
-import { Router, type IRouter } from "express";
+import { getAuth } from "@clerk/express";
+import { Router, type IRouter, type Request } from "express";
 import {
   createBertoDailyPlan,
   type QqqDailyCandle,
 } from "../lib/bertoGoldenSetup";
 import { buildComparisonSnapshot } from "../lib/strategyComparisonLab";
+import { strategyComparisonStore } from "../lib/strategyComparisonStore";
 
 const router: IRouter = Router();
 
-router.get("/strategy-comparison", (_req, res): void => {
+router.get("/strategy-comparison", async (req, res): Promise<void> => {
+  const id = userId(req);
+  if (!id) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   const configured = Number(process.env["STRATEGY_LAB_INITIAL_CAPITAL"]);
   const initialCapital = Number.isFinite(configured) && configured > 0 ? configured : 5_000;
-  res.json(buildComparisonSnapshot(initialCapital));
+  try {
+    const trades = await strategyComparisonStore.list(id);
+    const timestamps = trades.flatMap((trade) => [trade.openedAt, trade.closedAt]).sort();
+    res.json({
+      ...buildComparisonSnapshot(initialCapital, trades, {
+        from: timestamps.at(0),
+        to: timestamps.at(-1),
+      }),
+      persistence: { status: "healthy" },
+    });
+  } catch {
+    res.json({
+      ...buildComparisonSnapshot(initialCapital),
+      persistence: {
+        status: "degraded",
+        message: "Migration 0002 non applicata o database non disponibile.",
+      },
+    });
+  }
 });
 
 router.post("/strategy-comparison/berto/plan", (req, res): void => {
+  if (!userId(req)) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   try {
     const qqq = readCandle(req.body?.qqq);
     const sessionOpen = finiteNumber(req.body?.sp500SessionOpen, "sp500SessionOpen");
@@ -27,6 +56,12 @@ router.post("/strategy-comparison/berto/plan", (req, res): void => {
     });
   }
 });
+
+function userId(req: Request): string | undefined {
+  const auth = getAuth(req);
+  const claimUserId = auth?.sessionClaims?.userId;
+  return typeof claimUserId === "string" ? claimUserId : auth?.userId ?? undefined;
+}
 
 function readCandle(value: unknown): QqqDailyCandle {
   if (!value || typeof value !== "object") throw new Error("qqq candle is required.");
