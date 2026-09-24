@@ -60,9 +60,14 @@ La dashboard non indica un vincitore prima di almeno 100 operazioni chiuse per s
 La successiva decisione umana deve considerare rendimento netto, expectancy in R,
 profit factor, drawdown, costi, stabilità per regime e prova fuori campione.
 
-## Stato della persistenza
+## Persistenza
 
-Il motore, l'API di pianificazione e il calcolo delle metriche sono implementati.
-Il collegamento dei trade PAPER prodotti dai due executor al registro persistente
-deve essere completato quando entrambi gli executor ricevono il medesimo feed
-storico/live. Fino ad allora la dashboard mostra zero e non inventa risultati.
+La migrazione `0002_strategy_comparison_lab.sql` crea un registro immutabile
+separato per utente, esperimento, strategia e trade. Il vincolo composto impedisce
+duplicazioni e mescolamenti tra i due motori.
+
+Gli executor PAPER devono scrivere nel registro tramite
+`StrategyComparisonStore.append` usando lo stesso feed e lo stesso capitale.
+Finché non arrivano operazioni reali o storiche, la dashboard mostra zero senza
+inventare risultati. Se la migrazione non è applicata, la dashboard segnala
+esplicitamente persistenza degradata.
