@@ -118,3 +118,51 @@ export const insertInstrumentLockSchema = createInsertSchema(instrumentLocksTabl
 export type InsertUserRiskControls = z.infer<typeof insertUserRiskControlsSchema>;
 export type InsertStrategyMode = z.infer<typeof insertStrategyModeSchema>;
 export type InsertInstrumentLock = z.infer<typeof insertInstrumentLockSchema>;
+
+
+/**
+ * Immutable PAPER outcomes for the Strategy Comparison Lab.  The composite
+ * primary key and mandatory strategy id prevent results from the two engines
+ * being merged or counted twice.
+ */
+export const strategyComparisonTradesTable = pgTable("strategy_comparison_trades", {
+  userId: text("user_id").notNull(),
+  experimentId: text("experiment_id").notNull().default("five-vs-berto-v1"),
+  strategy: text("strategy").notNull(),
+  externalTradeId: text("external_trade_id").notNull(),
+  symbol: text("symbol").notNull(),
+  initialCapital: numeric("initial_capital", { precision: 18, scale: 2 }).notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+  netPnl: numeric("net_pnl", { precision: 18, scale: 4 }).notNull(),
+  riskAmount: numeric("risk_amount", { precision: 18, scale: 4 }).notNull(),
+  fees: numeric("fees", { precision: 18, scale: 4 }).notNull().default("0"),
+  slippage: numeric("slippage", { precision: 18, scale: 4 }).notNull().default("0"),
+  exitReason: text("exit_reason").notNull(),
+  sourceSnapshot: jsonb("source_snapshot").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({
+    columns: [
+      table.userId,
+      table.experimentId,
+      table.strategy,
+      table.externalTradeId,
+    ],
+  }),
+  check(
+    "strategy_comparison_trades_strategy_valid",
+    sql`strategy IN ('FIVE_BRAINS_STRATEGY', 'BERTO_GOLDEN_SETUP')`,
+  ),
+  check(
+    "strategy_comparison_trades_values_valid",
+    sql`initial_capital > 0 AND risk_amount >= 0 AND fees >= 0 AND slippage >= 0 AND closed_at >= opened_at`,
+  ),
+]);
+
+export const insertStrategyComparisonTradeSchema =
+  createInsertSchema(strategyComparisonTradesTable).omit({ createdAt: true });
+export type InsertStrategyComparisonTrade =
+  z.infer<typeof insertStrategyComparisonTradeSchema>;
+export type StrategyComparisonTrade =
+  typeof strategyComparisonTradesTable.$inferSelect;
