@@ -1,0 +1,56 @@
+Lavora esclusivamente sul branch integration/mt5-tre-modalita.
+
+Nella pagina “Confronto strategie” aggiungi una sezione informativa con uno switch a due opzioni:
+
+1. REGOLE BERTO
+2. REGOLE 5 CERVELLI
+
+Comportamento:
+- deve essere selezionabile una sola opzione alla volta;
+- cambiando opzione deve cambiare soltanto il riepilogo delle regole visualizzato;
+- non modificare motori decisionali, parametri, pesi, rischio, risultati, database o API;
+- impostazione iniziale: REGOLE BERTO;
+- mantieni lo stile grafico attuale della dashboard;
+- lo switch deve essere comprensibile anche da smartphone;
+- aggiungi attributi accessibili e stato selezionato chiaramente visibile.
+
+Per “REGOLE BERTO” conserva il riepilogo già presente.
+
+Per “REGOLE 5 CERVELLI” crea un riepilogo equivalente, leggendo le regole REALI già implementate nel codice, in particolare masterDecisionEngine e moduli collegati. Non inventare soglie, pesi o comportamenti.
+
+Il riepilogo deve separare chiaramente:
+
+- ANALISI TECNICA:
+  valuta struttura del prezzo, trend, momentum, volatilità e conferme multi-timeframe secondo le regole esistenti.
+
+- ANALISI FONDAMENTALE:
+  valuta dati economici e societari disponibili, qualità e completezza delle informazioni; se i dati mancano applica la normalizzazione già implementata.
+
+- MACRO:
+  considera scenario macroeconomico, eventi ad alto impatto e condizioni sistemiche secondo le regole esistenti.
+
+- NEWS:
+  usa esclusivamente notizie verificabili e fonti autorizzate; evidenzia dati mancanti, degradati, duplicati o in conflitto.
+
+- RISCHIO:
+  applica veto e riduzioni di size già presenti per capitale, esposizione, perdita giornaliera, numero di posizioni, correlazione e qualità dei dati.
+
+Aggiungi inoltre una sezione “Come nasce la decisione” ricavata dal codice:
+- i cervelli restano indipendenti;
+- i segnali disponibili vengono combinati secondo pesi e normalizzazioni esistenti;
+- un cervello opzionale indisponibile non deve essere rappresentato come blocco automatico se il codice lo rinormalizza;
+- i guardrail di rischio possono ridurre la size o impedire l’operazione;
+- mostra che l’esecuzione resta PAPER/SHADOW e LIVE è disabilitato.
+
+Non mostrare numeri o percentuali non presenti nel codice.
+Non alterare la scheda di confronto delle performance.
+Non applicare migrazioni e non eseguire Republish.
+
+Al termine esegui:
+pnpm --filter @workspace/api-server test &&
+pnpm --filter @workspace/api-server build &&
+PORT=5173 BASE_PATH=/ pnpm --filter @workspace/trading-ai-platform build &&
+pnpm typecheck &&
+git diff --check
+
+Fornisci elenco preciso dei file modificati e risultato dei controlli.

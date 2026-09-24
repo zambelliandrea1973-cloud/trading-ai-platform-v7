@@ -153,6 +153,7 @@ export function StrategyComparisonPage() {
   const [snapshot, setSnapshot] = useState<Snapshot>(fallback);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [visibleRules, setVisibleRules] = useState<'berto' | 'five-brains'>('berto');
 
   const load = async () => {
     setLoading(true);
@@ -227,17 +228,60 @@ export function StrategyComparisonPage() {
       <p className="mt-3 text-xs text-muted-foreground">Nessun vincitore viene indicato prima di almeno {snapshot.minimumClosedTradesForReview} trade chiusi per strategia e di una verifica fuori campione.</p>
     </section>
 
-    <section className="mb-5 panel p-5 md:p-6">
-      <SectionLabel aside={<Badge tone="amber">V1.0 · BLOCCATA</Badge>}>Regole Berto implementate</SectionLabel>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Rule icon={<TrendingUp size={15} />} title="Filtro QQQ" text="Opera solo se la candela regolare precedente è verde. Suffissi dai centesimi di Low e High." />
-        <Rule icon={<ArrowRightLeft size={15} />} title="Anti-clustering" text={`Distanza circolare < ${rules.suffixClusterDistance}: conserva soltanto il suffisso numericamente più basso.`} />
-        <Rule icon={<Target size={15} />} title="Livelli US500" text={`Solo livelli sotto l'open, griglia 100 pt, distanza minima ${rules.minimumDistancePoints} pt. Solo LONG.`} />
-        <Rule icon={<Clock3 size={15} />} title="Sessione New York" text={`${rules.sessionOpen}–09:59: tocchi invalidati. Entry da ${rules.entryWindowStart}. Chiusura ${rules.forcedExit}.`} />
-        <Rule icon={<ShieldCheck size={15} />} title="Primo tocco" text="Un livello può entrare una sola volta. Se toccato prima della finestra operativa resta escluso per tutta la giornata." />
-        <Rule icon={<TrendingDown size={15} />} title="Stop loss" text={`Entry − ${rules.stopLossPoints} punti, inclusivo del punto previsto per spread/slippage.`} />
-        <Rule icon={<TrendingUp size={15} />} title="Take profit" text={`Entry + ${rules.takeProfitPoints} punti. Nessun trailing o modifica da parte dell'AI.`} />
-        <Rule icon={<WalletCards size={15} />} title="Due letture rischio" text={`Originale Berto ${rules.originalRiskPerTradePct}%; confronto normalizzato ${rules.normalizedComparisonRiskPct}% per isolare la qualità dei segnali.`} />
+    <section className="mb-5 panel p-5 md:p-6" aria-labelledby="rules-summary-title">
+      <fieldset className="mb-5">
+        <legend className="eyebrow mb-3">Riepilogo delle regole</legend>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Strategia di cui leggere le regole">
+          {([
+            ['berto', 'REGOLE BERTO'],
+            ['five-brains', 'REGOLE 5 CERVELLI'],
+          ] as const).map(([value, label]) => (
+            <label key={value} className="relative cursor-pointer">
+              <input
+                type="radio"
+                name="visible-strategy-rules"
+                value={value}
+                checked={visibleRules === value}
+                onChange={() => setVisibleRules(value)}
+                aria-controls="strategy-rules-summary"
+                className="peer sr-only"
+              />
+              <span className="flex min-h-11 items-center justify-center rounded-md border border-border bg-background/45 px-4 py-3 text-center text-xs font-bold tracking-wide text-muted-foreground transition hover:border-primary/60 hover:text-foreground peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
+                {label}
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">La scelta cambia solo questo riepilogo; risultati e modalità operative restano invariati.</p>
+      </fieldset>
+      <div id="strategy-rules-summary" aria-live="polite">
+        {visibleRules === 'berto' ? <>
+          <div id="rules-summary-title"><SectionLabel aside={<Badge tone="amber">V1.0 · BLOCCATA</Badge>}>Regole Berto implementate</SectionLabel></div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Rule icon={<TrendingUp size={15} />} title="Filtro QQQ" text="Opera solo se la candela regolare precedente è verde. Suffissi dai centesimi di Low e High." />
+            <Rule icon={<ArrowRightLeft size={15} />} title="Anti-clustering" text={`Distanza circolare < ${rules.suffixClusterDistance}: conserva soltanto il suffisso numericamente più basso.`} />
+            <Rule icon={<Target size={15} />} title="Livelli US500" text={`Solo livelli sotto l'open, griglia 100 pt, distanza minima ${rules.minimumDistancePoints} pt. Solo LONG.`} />
+            <Rule icon={<Clock3 size={15} />} title="Sessione New York" text={`${rules.sessionOpen}–09:59: tocchi invalidati. Entry da ${rules.entryWindowStart}. Chiusura ${rules.forcedExit}.`} />
+            <Rule icon={<ShieldCheck size={15} />} title="Primo tocco" text="Un livello può entrare una sola volta. Se toccato prima della finestra operativa resta escluso per tutta la giornata." />
+            <Rule icon={<TrendingDown size={15} />} title="Stop loss" text={`Entry − ${rules.stopLossPoints} punti, inclusivo del punto previsto per spread/slippage.`} />
+            <Rule icon={<TrendingUp size={15} />} title="Take profit" text={`Entry + ${rules.takeProfitPoints} punti. Nessun trailing o modifica da parte dell'AI.`} />
+            <Rule icon={<WalletCards size={15} />} title="Due letture rischio" text={`Originale Berto ${rules.originalRiskPerTradePct}%; confronto normalizzato ${rules.normalizedComparisonRiskPct}% per isolare la qualità dei segnali.`} />
+          </div>
+        </> : <>
+          <div id="rules-summary-title"><SectionLabel aside={<Badge tone="teal">SOLO INFORMATIVO</Badge>}>Regole 5 Cervelli</SectionLabel></div>
+          <p className="mb-4 text-xs leading-relaxed text-muted-foreground">Il motore riceve segnali tecnici e macro/news con punteggio e confidenza; valuta separatamente i dati fondamentali e statistici quando disponibili. Questo riepilogo non invia segnali né cambia le regole.</p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Rule icon={<TrendingUp size={15} />} title="ANALISI TECNICA" text="Considera il segnale tecnico disponibile su struttura del prezzo, trend, momentum e volatilità. Le conferme multi-timeframe dipendono dai dati del segnale; il Master Decision Engine ne riceve punteggio e confidenza, senza ricalcolare gli indicatori." />
+            <Rule icon={<WalletCards size={15} />} title="ANALISI FONDAMENTALE" text="Valuta prezzo, utili, crescita, margini, redditività e debito quando presenti. Le metriche assenti non vengono inventate: quelle disponibili sono normalizzate e la copertura determina la confidenza." />
+            <Rule icon={<Clock3 size={15} />} title="MACRO" text="Il motore usa il segnale aggregato macro/news; eventi ad alto impatto imminenti riducono la size. Shock sistemici e condizioni estreme di volatilità possono attivare i guardrail di sicurezza." />
+            <Rule icon={<CheckCircle2 size={15} />} title="NEWS" text="Il flusso di verifica considera fonti autorizzate, date e corrispondenze dirette tra notizie. Dati mancanti o degradati, duplicati e notizie in conflitto non sono presentati come conferme certe; al motore arriva il segnale macro/news aggregato." />
+            <Rule icon={<ShieldCheck size={15} />} title="RISCHIO" text="Controlla perdita giornaliera, drawdown, qualità del feed, connessione broker, spread, slippage e volatilità. Correlazione elevata e Risk Brain riducono la size; i limiti condivisi di rischio per trade, esposizione e numero di posizioni sono verificati nel controllo delle modalità." />
+          </div>
+          <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
+            <h3 className="display mb-2 text-base font-bold text-foreground">Come nasce la decisione</h3>
+            <p className="text-xs leading-relaxed text-muted-foreground">Le analisi restano separate: il Master Decision Engine combina i punteggi disponibili di tecnica, macro/news, fondamentale e statistica con pesi diversi per orizzonte. Se un segnale opzionale manca, rinormalizza i pesi degli altri invece di bloccare automaticamente l’operazione. I guardrail di rischio possono ridurre punteggio e size oppure imporre NO_TRADE; senza punteggi disponibili la decisione è WAIT. Il contesto istituzionale resta SHADOW e non influisce sulla decisione. Operatività solo PAPER/SHADOW: LIVE disabilitato.</p>
+          </div>
+        </>}
       </div>
     </section>
 
