@@ -60,6 +60,7 @@ type Snapshot = {
   bertoRules: BertoRules;
   verdict: 'INSUFFICIENT_DATA';
   minimumClosedTradesForReview: number;
+  persistence?: { status: 'healthy' | 'degraded'; message?: string };
 };
 
 const emptyMetrics = (capital = 5_000): Metrics => ({
@@ -106,6 +107,7 @@ const fallback: Snapshot = {
   },
   verdict: 'INSUFFICIENT_DATA',
   minimumClosedTradesForReview: 100,
+  persistence: { status: 'degraded', message: 'Dati persistenti non ancora caricati.' },
 };
 
 const money = (value: number) => new Intl.NumberFormat('it-IT', {
@@ -192,6 +194,7 @@ export function StrategyComparisonPage() {
     />
 
     {error && <div className="mb-4"><Notice tone="negative"><span>{error}</span></Notice></div>}
+    {snapshot.persistence?.status === 'degraded' && <div className="mb-4"><Notice tone="negative"><span><strong>Registro confronto non disponibile.</strong> {snapshot.persistence.message}</span></Notice></div>}
     <Notice tone="teal"><span><strong>Separazione attiva.</strong> Portafogli, P&amp;L, drawdown, ordini virtuali e cronologie sono indipendenti. LIVE è disabilitato per entrambi.</span></Notice>
 
     <div className="my-5 grid gap-4 lg:grid-cols-2">
