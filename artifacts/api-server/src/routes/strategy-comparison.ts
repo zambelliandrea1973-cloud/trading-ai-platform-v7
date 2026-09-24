@@ -22,8 +22,8 @@ router.get("/strategy-comparison", async (req, res): Promise<void> => {
     const timestamps = trades.flatMap((trade) => [trade.openedAt, trade.closedAt]).sort();
     res.json({
       ...buildComparisonSnapshot(initialCapital, trades, {
-        from: timestamps.at(0),
-        to: timestamps.at(-1),
+        from: timestamps[0],
+        to: timestamps.length ? timestamps[timestamps.length - 1] : undefined,
       }),
       persistence: { status: "healthy" },
     });
