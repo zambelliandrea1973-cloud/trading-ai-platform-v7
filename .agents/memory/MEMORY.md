@@ -6,6 +6,7 @@
 - [Clerk React compatibility](clerk-react-compatibility.md) — Clerk must use a React patch release listed in its peer range; unsupported patches can cause invalid hook calls.
 - [GitHub initial import](github-initial-import.md) — initialize empty repositories before Git-data uploads and avoid burst blob requests through the connector proxy.
 - [Git alignment diffing](git-alignment-diffing.md) — detect real upstream drift by diffing recursive blob SHAs, not commit messages or file counts alone.
+- [GitHub connector commit mirroring](github-connector-commit-mirroring.md) — preserve exact Git object bytes and verify hashes when Git HTTPS push credentials are unavailable.
 - [Broker read-status persistence](broker-read-status-persistence.md) — preserve broker endpoint outcomes with singleton, endpoint-specific atomic writes; never overwrite a whole snapshot.
 - [Encoded asset path parameters](encoded-asset-path-parameters.md) — generated client path parameters are not URL-encoded; encode slash-bearing symbols before calling asset hooks.
 - [BERTO session-close behavior](berto-session-close.md) — after 21:55 Rome time, reject new fills on started setups without changing their recorded state.
