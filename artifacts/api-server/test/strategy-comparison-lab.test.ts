@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   BERTO_RULES, buildBertoOrders, buildLevels, centSuffix, closeBertoSession,
   createBertoDailyPlan, declusterSuffixes, evaluateBertoPositionExit,
-  evaluateFirstTouch, fillBertoPending, getUsMarketSession,
+  evaluateFirstTouch, fillBertoPending, getBertoMarketSession,
 } from "../src/lib/bertoGoldenSetup";
 import { buildComparisonSnapshot, calculateMetrics } from "../src/lib/strategyComparisonLab";
 
@@ -56,20 +56,36 @@ test("SL 13 and TP 22 are measured from breakout entry", () => {
 });
 
 test("US session stays anchored to New York across DST", () => {
-  for (const at of ["2026-01-15T15:00:00.000Z", "2026-07-15T15:00:00.000Z"]) {
-    const session = getUsMarketSession(at);
-    assert.equal(session.closed, false);
+  const newYorkTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  });
+  for (const { date, openUtc, exitUtc } of [
+    { date: "2026-01-15", openUtc: "14:30", exitUtc: "20:55" },
+    { date: "2026-07-15", openUtc: "13:30", exitUtc: "19:55" },
+  ]) {
+    const open = `${date}T${openUtc}:00.000Z`;
+    const exit = `${date}T${exitUtc}:00.000Z`;
+    const session = getBertoMarketSession(open);
+    assert.equal(session.tradingDate, date);
+    assert.equal(session.isTradingDay, true);
+    assert.equal(session.isEarlyClose, false);
     assert.equal(session.openMinute, 570);
     assert.equal(session.forcedExitMinute, 955);
+    assert.equal(newYorkTime.format(new Date(open)), "09:30");
+    assert.equal(newYorkTime.format(new Date(exit)), "15:55");
   }
 });
 
 test("US holidays close BERTO and early-close sessions exit at 12:55 ET", () => {
-  assert.equal(getUsMarketSession("2026-07-03T15:00:00.000Z").closed, true);
-  assert.equal(getUsMarketSession("2026-12-25T15:00:00.000Z").closed, true);
+  for (const at of ["2026-07-03T15:00:00.000Z", "2026-12-25T15:00:00.000Z"]) {
+    const session = getBertoMarketSession(at);
+    assert.equal(session.isTradingDay, false);
+    assert.equal(session.isEarlyClose, false);
+  }
   for (const at of ["2026-11-27T16:00:00.000Z", "2026-12-24T16:00:00.000Z"]) {
-    const session = getUsMarketSession(at);
-    assert.equal(session.earlyClose, true);
+    const session = getBertoMarketSession(at);
+    assert.equal(session.isTradingDay, true);
+    assert.equal(session.isEarlyClose, true);
     assert.equal(session.forcedExitMinute, 775);
   }
 });
