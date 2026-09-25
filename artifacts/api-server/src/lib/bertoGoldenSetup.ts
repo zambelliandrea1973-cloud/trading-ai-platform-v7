@@ -1,17 +1,20 @@
 export const BERTO_RULES = {
-  id: "BERTO_QQQ_BREAKOUT_RETEST",
-  version: "3.0.0",
+  id: "BERTO_QQQ_LATEST",
+  version: "4.40-rebuild",
   signalSymbol: "QQQ",
+  signalSourceUrl: "https://www.investing.com/etfs/powershares-qqqq",
   executionSymbol: "US500",
-  timezone: "Europe/Rome",
-  preparationStart: "09:30",
-  entryWindowStart: "15:30",
-  forcedExit: "21:55",
+  marketTimezone: "America/New_York",
+  regularOpen: "09:30",
+  regularForcedExit: "15:55",
+  earlyCloseForcedExit: "12:55",
   timeframe: "1m",
   contracts: 1,
   breakoutPoints: 8,
-  stopOffsetPoints: 5,
-  takeProfitOffsetPoints: 30,
+  stopLossPointsFromEntry: 13,
+  takeProfitPointsFromEntry: 22,
+  maxLevelDistanceFromOpen: 50,
+  maxSpreadPoints: 2,
   suffixClusterDistance: 10,
   overnightAllowed: false,
   executionEnabled: false,
@@ -25,14 +28,10 @@ export type BertoDirection = "LONG" | "SHORT" | "NONE";
 export type BertoSuspensionReason =
   | "QQQ_PREVIOUS_CANDLE_DOJI"
   | "INVALID_DAILY_PRICES"
-  | "NO_VALID_LEVELS";
+  | "NO_VALID_LEVELS"
+  | "US_MARKET_CLOSED";
 
-export interface QqqDailyCandle {
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-}
+export interface QqqDailyCandle { open: number; high: number; low: number; close: number; }
 
 export interface BertoLevel {
   price: number;
@@ -60,14 +59,14 @@ export interface BertoDailyPlan {
 
 export type BertoLevelStatus =
   | "ARMED"
-  | "DISCARDED_1530_TOUCH"
+  | "DISCARDED_OPENING_CANDLE_TOUCH"
   | "DISCARDED_WRONG_APPROACH"
   | "PENDING_STOP"
   | "POSITION_OPEN"
   | "CLOSED_STOP_LOSS"
   | "CLOSED_TAKE_PROFIT"
   | "CLOSED_FORCED"
-  | "CANCELLED_2155"
+  | "CANCELLED_SESSION_END"
   | "EXPIRED";
 
 export interface BertoLevelState {
@@ -90,48 +89,25 @@ export interface BertoOrders {
   takeProfit: number;
 }
 
-export function createBertoDailyPlan(
-  qqq: QqqDailyCandle,
-  sp500SessionOpen: number,
-  depth = 3,
-): BertoDailyPlan {
+export interface BertoMarketSession {
+  tradingDate: string;
+  isTradingDay: boolean;
+  isEarlyClose: boolean;
+  openMinute: number;
+  forcedExitMinute: number;
+}
+
+export function createBertoDailyPlan(qqq: QqqDailyCandle, sp500SessionOpen: number, depth = 3): BertoDailyPlan {
   assertFinitePositive(sp500SessionOpen, "S&P 500 session open");
-  const validPrices = [qqq.open, qqq.high, qqq.low, qqq.close]
-    .every((value) => Number.isFinite(value) && value > 0);
-  const direction: BertoDirection = !validPrices
-    ? "NONE"
-    : qqq.close > qqq.open
-      ? "LONG"
-      : qqq.close < qqq.open
-        ? "SHORT"
-        : "NONE";
+  const validPrices = [qqq.open, qqq.high, qqq.low, qqq.close].every((value) => Number.isFinite(value) && value > 0);
+  const direction: BertoDirection = !validPrices ? "NONE" : qqq.close > qqq.open ? "LONG" : qqq.close < qqq.open ? "SHORT" : "NONE";
   const rawSuffixes = validPrices ? [centSuffix(qqq.low), centSuffix(qqq.high)] : [];
-
   if (!validPrices || direction === "NONE") {
-    return {
-      ...basePlan(sp500SessionOpen),
-      active: false,
-      suspensionReason: validPrices ? "QQQ_PREVIOUS_CANDLE_DOJI" : "INVALID_DAILY_PRICES",
-      qqqCandleGreen: direction === "LONG",
-      direction,
-      rawSuffixes,
-      validSuffixes: [],
-      levels: [],
-    };
+    return { ...basePlan(sp500SessionOpen), active: false, suspensionReason: validPrices ? "QQQ_PREVIOUS_CANDLE_DOJI" : "INVALID_DAILY_PRICES", qqqCandleGreen: direction === "LONG", direction, rawSuffixes, validSuffixes: [], levels: [] };
   }
-
   const validSuffixes = declusterSuffixes(rawSuffixes);
   const levels = buildLevels(sp500SessionOpen, validSuffixes, depth);
-  return {
-    ...basePlan(sp500SessionOpen),
-    active: levels.length > 0,
-    suspensionReason: levels.length ? undefined : "NO_VALID_LEVELS",
-    qqqCandleGreen: direction === "LONG",
-    direction,
-    rawSuffixes,
-    validSuffixes,
-    levels,
-  };
+  return { ...basePlan(sp500SessionOpen), active: levels.length > 0, suspensionReason: levels.length ? undefined : "NO_VALID_LEVELS", qqqCandleGreen: direction === "LONG", direction, rawSuffixes, validSuffixes, levels };
 }
 
 export function centSuffix(price: number): number {
@@ -149,16 +125,12 @@ export function declusterSuffixes(suffixes: number[]): number[] {
   const unique = [...new Set(suffixes.map(normalizeSuffix))].sort((a, b) => a - b);
   if (unique.length <= 1) return unique;
   if (unique.length !== 2) throw new Error("Berto setup requires exactly the Low and High suffixes.");
-  return circularSuffixDistance(unique[0], unique[1]) < BERTO_RULES.suffixClusterDistance
-    ? [unique[0]]
-    : unique;
+  return circularSuffixDistance(unique[0], unique[1]) < BERTO_RULES.suffixClusterDistance ? [unique[0]] : unique;
 }
 
 export function buildLevels(sessionOpen: number, suffixes: number[], depth = 3): BertoLevel[] {
   assertFinitePositive(sessionOpen, "S&P 500 session open");
-  if (!Number.isInteger(depth) || depth < 1 || depth > 50) {
-    throw new Error("Level depth must be an integer between 1 and 50.");
-  }
+  if (!Number.isInteger(depth) || depth < 1 || depth > 50) throw new Error("Level depth must be an integer between 1 and 50.");
   const levels = new Map<number, BertoLevel>();
   const century = Math.floor(sessionOpen / 100) * 100;
   for (const rawSuffix of suffixes) {
@@ -166,12 +138,9 @@ export function buildLevels(sessionOpen: number, suffixes: number[], depth = 3):
     for (let offset = -depth; offset <= depth; offset += 1) {
       const level = century + offset * 100 + suffix;
       if (level <= 0) continue;
-      levels.set(level, {
-        price: level,
-        suffix,
-        distanceFromOpen: round(Math.abs(sessionOpen - level)),
-        state: "ARMED",
-      });
+      const distanceFromOpen = round(Math.abs(sessionOpen - level));
+      if (distanceFromOpen > BERTO_RULES.maxLevelDistanceFromOpen) continue;
+      levels.set(level, { price: level, suffix, distanceFromOpen, state: "ARMED" });
     }
   }
   return [...levels.values()].sort((a, b) => a.price - b.price);
@@ -179,170 +148,178 @@ export function buildLevels(sessionOpen: number, suffixes: number[], depth = 3):
 
 export function buildBertoOrders(level: number, direction: Exclude<BertoDirection, "NONE">): BertoOrders {
   assertFinitePositive(level, "Berto level");
-  if (direction === "LONG") {
-    return {
-      direction,
-      kind: "STOP",
-      contracts: 1,
-      entryStop: level + BERTO_RULES.breakoutPoints,
-      stopLoss: level - BERTO_RULES.stopOffsetPoints,
-      takeProfit: level + BERTO_RULES.takeProfitOffsetPoints,
-    };
-  }
+  const entryStop = direction === "LONG" ? level + BERTO_RULES.breakoutPoints : level - BERTO_RULES.breakoutPoints;
   return {
     direction,
     kind: "STOP",
     contracts: 1,
-    entryStop: level - BERTO_RULES.breakoutPoints,
-    stopLoss: level + BERTO_RULES.stopOffsetPoints,
-    takeProfit: level - BERTO_RULES.takeProfitOffsetPoints,
+    entryStop: round(entryStop),
+    stopLoss: round(direction === "LONG" ? entryStop - BERTO_RULES.stopLossPointsFromEntry : entryStop + BERTO_RULES.stopLossPointsFromEntry),
+    takeProfit: round(direction === "LONG" ? entryStop + BERTO_RULES.takeProfitPointsFromEntry : entryStop - BERTO_RULES.takeProfitPointsFromEntry),
   };
 }
 
-export function evaluateFirstTouch(
-  current: BertoLevelState,
-  candle: { low: number; high: number; previousClose: number; at: string },
-  direction: Exclude<BertoDirection, "NONE">,
-): BertoLevelState {
+export function getBertoMarketSession(isoTimestamp: string): BertoMarketSession {
+  const date = parseIso(isoTimestamp);
+  const parts = zonedParts(date, BERTO_RULES.marketTimezone);
+  const tradingDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+  const closed = isUsEquityMarketHoliday(parts.year, parts.month, parts.day) || parts.weekday === 0 || parts.weekday === 6;
+  const early = !closed && isUsEquityEarlyClose(parts.year, parts.month, parts.day);
+  return { tradingDate, isTradingDay: !closed, isEarlyClose: early, openMinute: 9 * 60 + 30, forcedExitMinute: early ? 12 * 60 + 55 : 15 * 60 + 55 };
+}
+
+export function evaluateFirstTouch(current: BertoLevelState, candle: { low: number; high: number; previousClose: number; at: string }, direction: Exclude<BertoDirection, "NONE">): BertoLevelState {
   if (current.state !== "ARMED") return current;
-  const minute = romeMinuteOfDay(candle.at);
-  const entryStart = 15 * 60 + 30;
-  const exit = 21 * 60 + 55;
-  if (minute >= exit) return { ...current, state: "EXPIRED" };
-  if (minute < entryStart || candle.low > current.price || candle.high < current.price) return current;
-  if (minute === entryStart) return { ...current, state: "DISCARDED_1530_TOUCH", firstTouchedAt: candle.at };
-  const correctApproach = direction === "LONG"
-    ? candle.previousClose < current.price
-    : candle.previousClose > current.price;
+  const session = getBertoMarketSession(candle.at);
+  if (!session.isTradingDay) return { ...current, state: "EXPIRED" };
+  const minute = newYorkMinuteOfDay(candle.at);
+  if (minute >= session.forcedExitMinute) return { ...current, state: "EXPIRED" };
+  if (minute < session.openMinute || candle.low > current.price || candle.high < current.price) return current;
+  if (minute === session.openMinute) return { ...current, state: "DISCARDED_OPENING_CANDLE_TOUCH", firstTouchedAt: candle.at };
+  const correctApproach = direction === "LONG" ? candle.previousClose < current.price : candle.previousClose > current.price;
   if (!correctApproach) return { ...current, state: "DISCARDED_WRONG_APPROACH", firstTouchedAt: candle.at };
   return { ...current, state: "PENDING_STOP", firstTouchedAt: candle.at, order: buildBertoOrders(current.price, direction) };
 }
 
-/** A quote alone has no previous candle close, so it cannot authorize a pending order. */
-export function evaluateLevelTouch(
-  current: BertoLevelState,
-  quote: { ask: number; at: string },
-): BertoLevelState {
+/** Quotes alone cannot authorize a new setup because BERTO requires the previous closed 1m candle to establish approach direction. */
+export function evaluateLevelTouch(current: BertoLevelState, quote: { ask: number; at: string }): BertoLevelState {
   if (current.state !== "ARMED") return current;
   assertFinitePositive(quote.ask, "Ask");
-  const minute = romeMinuteOfDay(quote.at);
-  const entryStart = 15 * 60 + 30;
-  const exit = 21 * 60 + 55;
-  if (minute >= exit) return { ...current, state: "EXPIRED" };
-  if (minute < entryStart || quote.ask !== current.price) return current;
-  if (minute === entryStart) return { ...current, state: "DISCARDED_1530_TOUCH", firstTouchedAt: quote.at };
+  const session = getBertoMarketSession(quote.at);
+  if (!session.isTradingDay || newYorkMinuteOfDay(quote.at) >= session.forcedExitMinute) return { ...current, state: "EXPIRED" };
   return current;
 }
 
-export function fillBertoPending(
-  current: BertoLevelState,
-  candle: { low: number; high: number; at: string },
-): BertoLevelState {
+export function fillBertoPending(current: BertoLevelState, candle: { low: number; high: number; at: string; spreadPoints?: number }): BertoLevelState {
   if (current.state !== "PENDING_STOP" || !current.order || !current.firstTouchedAt) return current;
   if (!isWithinBertoSession(candle.at, current.firstTouchedAt)) return current;
-  // One-minute OHLC cannot establish whether a breakout preceded the first touch in the same candle.
   if (Date.parse(candle.at) <= Date.parse(current.firstTouchedAt)) return current;
-  const crossed = current.order.direction === "LONG"
-    ? candle.high >= current.order.entryStop
-    : candle.low <= current.order.entryStop;
+  if (candle.spreadPoints !== undefined) {
+    if (!Number.isFinite(candle.spreadPoints) || candle.spreadPoints < 0 || candle.spreadPoints > BERTO_RULES.maxSpreadPoints) return current;
+  }
+  const crossed = current.order.direction === "LONG" ? candle.high >= current.order.entryStop : candle.low <= current.order.entryStop;
   return crossed ? { ...current, state: "POSITION_OPEN", positionOpenedAt: candle.at } : current;
 }
 
-export function evaluateBertoPositionExit(
-  current: BertoLevelState,
-  candle: { low: number; high: number; at: string },
-): BertoLevelState {
+export function evaluateBertoPositionExit(current: BertoLevelState, candle: { low: number; high: number; at: string }): BertoLevelState {
   if (current.state !== "POSITION_OPEN" || !current.order || !current.positionOpenedAt) return current;
   if (!isWithinBertoSession(candle.at, current.positionOpenedAt)) return current;
-  // Do not infer the intraminute path from the entry candle's OHLC.
   if (Date.parse(candle.at) <= Date.parse(current.positionOpenedAt)) return current;
   const { direction, stopLoss, takeProfit } = current.order;
   const stopped = direction === "LONG" ? candle.low <= stopLoss : candle.high >= stopLoss;
   const won = direction === "LONG" ? candle.high >= takeProfit : candle.low <= takeProfit;
   if (!stopped && !won) return current;
-  // A candle touching both barriers is conservatively counted as a stop loss.
   return closePosition(current, candle.at, stopped ? stopLoss : takeProfit, stopped ? "CLOSED_STOP_LOSS" : "CLOSED_TAKE_PROFIT");
 }
 
-/** Shadow-only end-of-session transition; the caller supplies the observed market price for open positions. */
 export function closeBertoSession(levels: BertoLevelState[], at: string, marketPrice: number): BertoLevelState[] {
   assertFinitePositive(marketPrice, "Market close price");
-  if (romeMinuteOfDay(at) < 21 * 60 + 55) return levels;
+  const session = getBertoMarketSession(at);
+  if (session.isTradingDay && newYorkMinuteOfDay(at) < session.forcedExitMinute) return levels;
   return levels.map((level) => {
     if (level.state === "ARMED") return { ...level, state: "EXPIRED" };
-    if (!level.firstTouchedAt || !sameRomeDate(at, level.firstTouchedAt)) return level;
-    if (level.state === "PENDING_STOP") return { ...level, state: "CANCELLED_2155", closedAt: at };
+    if (!level.firstTouchedAt || !sameNewYorkDate(at, level.firstTouchedAt)) return level;
+    if (level.state === "PENDING_STOP") return { ...level, state: "CANCELLED_SESSION_END", closedAt: at };
     if (level.state === "POSITION_OPEN") return closePosition(level, at, marketPrice, "CLOSED_FORCED");
     return level;
   });
 }
 
-function closePosition(
-  current: BertoLevelState,
-  at: string,
-  exitPrice: number,
-  state: "CLOSED_STOP_LOSS" | "CLOSED_TAKE_PROFIT" | "CLOSED_FORCED",
-): BertoLevelState {
+function closePosition(current: BertoLevelState, at: string, exitPrice: number, state: "CLOSED_STOP_LOSS" | "CLOSED_TAKE_PROFIT" | "CLOSED_FORCED"): BertoLevelState {
   if (!current.order) return current;
   const sign = current.order.direction === "LONG" ? 1 : -1;
   return { ...current, state, closedAt: at, exitPrice, pnlPoints: round((exitPrice - current.order.entryStop) * sign) };
 }
 
 function basePlan(sessionOpen: number) {
-  return {
-    strategyId: BERTO_RULES.id,
-    version: BERTO_RULES.version,
-    mode: "SHADOW" as const,
-    executionEnabled: false as const,
-    decisionInfluence: false as const,
-    sessionOpen,
-    rules: BERTO_RULES,
-  };
+  return { strategyId: BERTO_RULES.id, version: BERTO_RULES.version, mode: "SHADOW" as const, executionEnabled: false as const, decisionInfluence: false as const, sessionOpen, rules: BERTO_RULES };
 }
 
 function normalizeSuffix(value: number): number {
   if (!Number.isInteger(value) || value < 0 || value > 99) throw new Error("Suffix must be an integer between 0 and 99.");
   return value;
 }
+function assertFinitePositive(value: number, label: string): void { if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number.`); }
+function round(value: number): number { return Number(value.toFixed(6)); }
+function pad(value: number): string { return String(value).padStart(2, "0"); }
+function parseIso(value: string): Date { const date = new Date(value); if (Number.isNaN(date.getTime())) throw new Error("Timestamp must be valid ISO-8601."); return date; }
 
-function assertFinitePositive(value: number, label: string): void {
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number.`);
+function newYorkMinuteOfDay(isoTimestamp: string): number {
+  const p = zonedParts(parseIso(isoTimestamp), BERTO_RULES.marketTimezone);
+  return p.hour * 60 + p.minute;
 }
-
+function sameNewYorkDate(left: string, right: string): boolean {
+  return getBertoMarketSession(left).tradingDate === getBertoMarketSession(right).tradingDate;
+}
 function isWithinBertoSession(at: string, startedAt?: string): boolean {
-  const minute = romeMinuteOfDay(at);
-  if (minute < 15 * 60 + 30 || minute >= 21 * 60 + 55) return false;
-  // Legacy states without a touch or breakout timestamp cannot prove which session they belong to.
-  // Keep their recorded state, but do not create a new fill without a session anchor.
   if (!startedAt) return false;
-  return sameRomeDate(at, startedAt);
+  const session = getBertoMarketSession(at);
+  const minute = newYorkMinuteOfDay(at);
+  return session.isTradingDay && minute >= session.openMinute && minute < session.forcedExitMinute && sameNewYorkDate(at, startedAt);
 }
 
-function sameRomeDate(at: string, startedAt: string): boolean {
-  const romeDate = new Intl.DateTimeFormat("en-CA", {
-    timeZone: BERTO_RULES.timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return romeDate.format(new Date(at)) === romeDate.format(new Date(startedAt));
+function zonedParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+  const weekdayText = parts.find((p) => p.type === "weekday")?.value;
+  const weekdays: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute"), weekday: weekdays[weekdayText ?? ""] };
 }
 
-function romeMinuteOfDay(isoTimestamp: string): number {
-  const date = new Date(isoTimestamp);
-  if (Number.isNaN(date.getTime())) throw new Error("Timestamp must be valid ISO-8601.");
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: BERTO_RULES.timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const hour = Number(parts.find((part) => part.type === "hour")?.value);
-  const minute = Number(parts.find((part) => part.type === "minute")?.value);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) throw new Error("Unable to resolve Rome session time.");
-  return hour * 60 + minute;
+function isUsEquityMarketHoliday(year: number, month: number, day: number): boolean {
+  const key = `${year}-${pad(month)}-${pad(day)}`;
+  const holidays = new Set<string>();
+  addObservedFixedHoliday(holidays, year, 1, 1);
+  addObservedFixedHoliday(holidays, year, 6, 19);
+  addObservedFixedHoliday(holidays, year, 7, 4);
+  addObservedFixedHoliday(holidays, year, 12, 25);
+  holidays.add(nthWeekday(year, 1, 1, 3));
+  holidays.add(nthWeekday(year, 2, 1, 3));
+  holidays.add(lastWeekday(year, 5, 1));
+  holidays.add(nthWeekday(year, 9, 1, 1));
+  holidays.add(nthWeekday(year, 11, 4, 4));
+  holidays.add(goodFriday(year));
+  return holidays.has(key);
 }
 
-function round(value: number): number {
-  return Number(value.toFixed(6));
+function isUsEquityEarlyClose(year: number, month: number, day: number): boolean {
+  const key = `${year}-${pad(month)}-${pad(day)}`;
+  const thanksgiving = nthWeekday(year, 11, 4, 4);
+  const afterThanksgiving = shiftDate(thanksgiving, 1);
+  if (key === afterThanksgiving) return true;
+  const christmasEve = `${year}-12-24`;
+  if (key === christmasEve && weekdayUtc(year, 12, 24) >= 1 && weekdayUtc(year, 12, 24) <= 5 && !isUsEquityMarketHoliday(year, 12, 24)) return true;
+  const july4 = weekdayUtc(year, 7, 4);
+  if (july4 >= 2 && july4 <= 5 && key === `${year}-07-03`) return true;
+  if (july4 === 1 && key === `${year}-07-01`) return true;
+  return false;
 }
+
+function addObservedFixedHoliday(set: Set<string>, year: number, month: number, day: number): void {
+  const weekday = weekdayUtc(year, month, day);
+  let observed = `${year}-${pad(month)}-${pad(day)}`;
+  if (weekday === 6) observed = dateKey(new Date(Date.UTC(year, month - 1, day - 1)));
+  if (weekday === 0) observed = dateKey(new Date(Date.UTC(year, month - 1, day + 1)));
+  set.add(observed);
+}
+function nthWeekday(year: number, month: number, weekday: number, nth: number): string {
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const day = 1 + ((weekday - first.getUTCDay() + 7) % 7) + (nth - 1) * 7;
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+function lastWeekday(year: number, month: number, weekday: number): string {
+  const last = new Date(Date.UTC(year, month, 0));
+  const day = last.getUTCDate() - ((last.getUTCDay() - weekday + 7) % 7);
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+function goodFriday(year: number): string { return shiftDate(easterSunday(year), -2); }
+function easterSunday(year: number): string {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+function shiftDate(key: string, days: number): string { const date = new Date(`${key}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return dateKey(date); }
+function dateKey(date: Date): string { return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`; }
+function weekdayUtc(year: number, month: number, day: number): number { return new Date(Date.UTC(year, month - 1, day)).getUTCDay(); }
