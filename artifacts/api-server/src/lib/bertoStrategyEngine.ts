@@ -56,9 +56,34 @@ export type BertoDecision = {
   rationale: string;
 };
 
+/**
+ * BERTO QQQ/ES retest model.
+ *
+ * The reference level is derived from the PREVIOUS trading day's QQQ data.
+ * Runtime ingestion must populate:
+ *   qqqReferenceLevel: S&P 500 reference level derived from prior-day QQQ data
+ *   currentPrice: current S&P 500 price
+ *   previousPrice: previous observed S&P 500 price (optional; context.previousValues may also contain currentPrice)
+ *
+ * The historical parameters supplied for BERTO are intentionally fixed here:
+ * - normal overshoot/retest zone: 4..8 S&P points beyond the QQQ-derived level
+ * - transition zone: >8 and <13 points (observe; no automatic retest entry)
+ * - breakout regime: 13..15+ points beyond the level; do not treat as ordinary retest
+ *
+ * These parameters are NOT self-modifying. Future observations are to be logged and
+ * evaluated separately; promotion of new parameters into live BERTO requires explicit
+ * owner approval.
+ */
+export const BERTO_QQQ_PARAMETERS = {
+  overshootMinPoints: 4,
+  overshootMaxPoints: 8,
+  breakoutMinPoints: 13,
+  breakoutConfirmationPoints: 15,
+} as const;
+
 export const EMPTY_BERTO_RULESET: BertoRuleSet = {
   name: 'Berto',
-  version: '0.1-shell',
+  version: '0.2-qqq-retest',
   enabled: false,
   timeframes: [],
   entryLong: [],
@@ -66,8 +91,56 @@ export const EMPTY_BERTO_RULESET: BertoRuleSet = {
   exit: [],
   filters: [],
   risk: {},
-  notes: ['Scatola pronta: inserire qui le regole di ingaggio fornite dal broker senza alterare il motore AI principale.'],
+  notes: [
+    'Motore BERTO predisposto per la strategia QQQ/S&P 500: livelli QQQ del giorno precedente, overshoot 4-8 punti, breakout da 13-15 punti.',
+    'I parametri storici BERTO restano bloccati: i dati futuri vengono monitorati ma non modificano automaticamente la strategia senza approvazione esplicita.',
+  ],
 };
+
+function numericValue(context: BertoMarketContext, key: string): number | undefined {
+  const value = context.values[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/** Dedicated BERTO QQQ/S&P state machine. Returns null when the required QQQ inputs are absent. */
+export function evaluateBertoQqqRetest(context: BertoMarketContext, risk: BertoRiskRules = {}): BertoDecision | null {
+  const level = numericValue(context, 'qqqReferenceLevel');
+  const price = numericValue(context, 'currentPrice');
+  if (level === undefined || price === undefined) return null;
+
+  const delta = price - level;
+  const distance = Math.abs(delta);
+  const direction = delta >= 0 ? 'ABOVE' : 'BELOW';
+  const p = BERTO_QQQ_PARAMETERS;
+
+  if (distance >= p.breakoutMinPoints) {
+    return {
+      strategy: 'BERTO', configured: true, decision: 'WAIT', matchedGroups: ['qqq-breakout-regime'], failedGroups: [], risk,
+      rationale: `BERTO: prezzo ${direction === 'ABOVE' ? 'sopra' : 'sotto'} il livello QQQ di ${distance.toFixed(2)} punti. Da ${p.breakoutMinPoints}-${p.breakoutConfirmationPoints} punti il movimento è trattato come possibile/definito breakout e non come normale overshoot-retest.`,
+    };
+  }
+
+  if (distance >= p.overshootMinPoints && distance <= p.overshootMaxPoints) {
+    return {
+      strategy: 'BERTO', configured: true,
+      decision: direction === 'ABOVE' ? 'SELL' : 'BUY',
+      matchedGroups: ['qqq-overshoot-retest'], failedGroups: [], risk,
+      rationale: `BERTO: overshoot di ${distance.toFixed(2)} punti rispetto al livello QQQ del giorno precedente, dentro la fascia storica ${p.overshootMinPoints}-${p.overshootMaxPoints}. Strategia di ritorno/retest del livello attiva.`,
+    };
+  }
+
+  if (distance > p.overshootMaxPoints && distance < p.breakoutMinPoints) {
+    return {
+      strategy: 'BERTO', configured: true, decision: 'WAIT', matchedGroups: ['qqq-transition-zone'], failedGroups: [], risk,
+      rationale: `BERTO: distanza ${distance.toFixed(2)} punti dal livello QQQ. Zona di transizione oltre l'overshoot tipico ma sotto la soglia breakout: nessun ingresso automatico.`,
+    };
+  }
+
+  return {
+    strategy: 'BERTO', configured: true, decision: 'WAIT', matchedGroups: ['qqq-level-monitoring'], failedGroups: [], risk,
+    rationale: `BERTO: distanza ${distance.toFixed(2)} punti dal livello QQQ; attesa dell'overshoot operativo (${p.overshootMinPoints}-${p.overshootMaxPoints} punti).`,
+  };
+}
 
 function compare(current: unknown, operator: BertoOperator, target: unknown, previous?: unknown) {
   if (operator === 'EQ') return current === target;
@@ -100,11 +173,15 @@ function groupsMatch(groups: BertoRuleGroup[], context: BertoMarketContext) {
 }
 
 export function evaluateBertoStrategy(context: BertoMarketContext, rules: BertoRuleSet = EMPTY_BERTO_RULESET): BertoDecision {
+  // Prefer the dedicated QQQ/S&P model whenever its real-data inputs are available.
+  const qqqDecision = evaluateBertoQqqRetest(context, rules.risk);
+  if (qqqDecision) return qqqDecision;
+
   const configured = rules.enabled && (rules.entryLong.length > 0 || rules.entryShort.length > 0);
   if (!configured) {
     return {
       strategy: 'BERTO', configured: false, decision: 'WAIT', matchedGroups: [], failedGroups: [], risk: rules.risk,
-      rationale: 'Berto è predisposto ma non contiene ancora le regole operative del broker.',
+      rationale: 'Berto è predisposto ma non contiene ancora dati QQQ reali o regole operative complete.',
     };
   }
 
