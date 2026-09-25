@@ -184,7 +184,12 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
     { date: "2026-10-26", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
   ] as const;
   const level = { price: 7_462, state: "ARMED" as const };
-  const candleAt = (at: string) => ({ low: 7_461, high: 7_463, previousClose: 7_460, at });
+  const candleAt = (at: string, direction: "LONG" | "SHORT") => ({
+    low: 7_461,
+    high: 7_463,
+    previousClose: direction === "SHORT" ? 7_464 : 7_460,
+    at,
+  });
   const minuteBefore = (iso: string) => new Date(Date.parse(iso) - 60_000).toISOString();
   const minuteAfter = (iso: string) => new Date(Date.parse(iso) + 60_000).toISOString();
 
@@ -201,20 +206,25 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
     assert.equal(romeTime.format(new Date(entry)), "15:30", `${context} entry UTC mapping`);
     assert.equal(romeTime.format(new Date(exit)), "21:55", `${context} exit UTC mapping`);
 
-    const beforeEntry = evaluateFirstTouch(level, candleAt(minuteBefore(entry)), "LONG");
-    assert.equal(beforeEntry.state, "ARMED", `${context} 15:29 crossing`);
-    const atEntry = evaluateFirstTouch(beforeEntry, candleAt(entry), "LONG");
-    assert.equal(atEntry.state, "DISCARDED_1530_TOUCH", `${context} 15:30 crossing`);
-    assert.equal(atEntry.firstTouchedAt, entry);
-    assert.equal(evaluateFirstTouch(atEntry, candleAt(minuteAfter(entry)), "LONG"), atEntry);
+    for (const direction of ["LONG", "SHORT"] as const) {
+      const caseContext = `${context} ${direction}`;
+      const beforeEntry = evaluateFirstTouch(level, candleAt(minuteBefore(entry), direction), direction);
+      assert.equal(beforeEntry.state, "ARMED", `${caseContext} 15:29 crossing`);
+      const atEntry = evaluateFirstTouch(beforeEntry, candleAt(entry, direction), direction);
+      assert.equal(atEntry.state, "DISCARDED_1530_TOUCH", `${caseContext} 15:30 crossing`);
+      assert.equal(atEntry.firstTouchedAt, entry, `${caseContext} discarded at 15:30`);
+      assert.equal(evaluateFirstTouch(atEntry, candleAt(minuteAfter(entry), direction), direction), atEntry);
 
-    const afterEntry = evaluateFirstTouch(level, candleAt(minuteAfter(entry)), "LONG");
-    assert.equal(afterEntry.state, "TOUCHED", `${context} 15:31 approach`);
-    assert.equal(afterEntry.firstTouchedAt, minuteAfter(entry));
+      const afterEntry = evaluateFirstTouch(level, candleAt(minuteAfter(entry), direction), direction);
+      assert.equal(afterEntry.state, "TOUCHED", `${caseContext} 15:31 approach`);
+      assert.equal(afterEntry.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch from ${direction === "SHORT" ? "above" : "below"}`);
 
-    assert.equal(evaluateFirstTouch(level, candleAt(minuteBefore(exit)), "LONG").state, "TOUCHED", `${context} 21:54 approach`);
-    assert.equal(evaluateFirstTouch(level, candleAt(exit), "LONG").state, "EXPIRED", `${context} 21:55 crossing`);
-    assert.equal(evaluateFirstTouch(level, candleAt(minuteAfter(exit)), "LONG").state, "EXPIRED", `${context} 21:56 crossing`);
+      const beforeExit = evaluateFirstTouch(level, candleAt(minuteBefore(exit), direction), direction);
+      assert.equal(beforeExit.state, "TOUCHED", `${caseContext} 21:54 approach`);
+      assert.equal(beforeExit.firstTouchedAt, minuteBefore(exit), `${caseContext} 21:54 first touch`);
+      assert.equal(evaluateFirstTouch(level, candleAt(exit, direction), direction).state, "EXPIRED", `${caseContext} 21:55 crossing`);
+      assert.equal(evaluateFirstTouch(level, candleAt(minuteAfter(exit), direction), direction).state, "EXPIRED", `${caseContext} 21:56 crossing`);
+    }
   }
 });
 
