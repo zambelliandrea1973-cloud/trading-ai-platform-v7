@@ -11,7 +11,9 @@ export interface TradingAccountRequestContext {
 export function getTradingAccountContext(req: Request): TradingAccountRequestContext {
   const auth = getAuth(req);
   const userId = auth?.sessionClaims?.userId || auth?.userId;
-  if (!userId) throw new AccountIsolationError("Authentication required.");
+  if (typeof userId !== "string" || !userId.trim()) {
+    throw new AccountIsolationError("Authentication required.");
+  }
 
   const tradingAccountId = req.header("x-trading-account-id")?.trim();
   if (!tradingAccountId) throw new AccountIsolationError("Trading account context required.");
