@@ -16,22 +16,25 @@ import {
   calculateMetrics,
 } from "../src/lib/strategyComparisonLab";
 
-test("a red QQQ candle creates a SHORT shadow plan; a doji suspends it", () => {
+test("a red QQQ candle creates an active SHORT shadow plan; a doji suspends it", () => {
   const plan = createBertoDailyPlan(
-    { open: 724, high: 737.62, low: 724.18, close: 723.99 },
+    { open: 724, high: 737.62, low: 723.18, close: 723.99 },
     7_529.55,
   );
   assert.equal(plan.active, true);
   assert.equal(plan.direction, "SHORT");
+  assert.equal(plan.qqqCandleGreen, false);
   assert.equal(plan.suspensionReason, undefined);
+  assert(plan.levels.length > 0);
   assert.equal(plan.executionEnabled, false);
   assert.equal(plan.decisionInfluence, false);
 
   const doji = createBertoDailyPlan(
-    { open: 724, high: 737.62, low: 724.18, close: 724 },
+    { open: 724, high: 737.62, low: 723.18, close: 724 },
     7_529.55,
   );
   assert.equal(doji.active, false);
+  assert.equal(doji.direction, "NONE");
   assert.equal(doji.suspensionReason, "QQQ_PREVIOUS_CANDLE_DOJI");
 });
 
@@ -43,7 +46,7 @@ test("QQQ suffix extraction and circular de-clustering follow the fixed rules", 
   assert.deepEqual(declusterSuffixes([18, 62]), [18, 62]);
 });
 
-test("level grid spans both sides of the open at the configured depth", () => {
+test("level grid includes levels on both sides of the session open without a distance cutoff", () => {
   const levels = buildLevels(7_529.55, [18, 62], 3);
   assert.deepEqual(
     levels.map((level) => level.price),
@@ -52,15 +55,18 @@ test("level grid spans both sides of the open at the configured depth", () => {
   assert(levels.some((level) => level.price < 7_529.55));
   assert(levels.some((level) => level.price > 7_529.55));
   assert(levels.every((level) => level.distanceFromOpen === Number(Math.abs(level.price - 7_529.55).toFixed(6))));
+  assert.equal(levels.find((level) => level.price === 7_518)?.distanceFromOpen, 11.55);
 });
 
-test("green QQQ candle creates an immutable shadow-only Berto plan", () => {
+test("green QQQ candle creates a LONG shadow-only Berto plan with Rome session rules", () => {
   const plan = createBertoDailyPlan(
     { open: 724, high: 737.62, low: 724.18, close: 735 },
     7_529.55,
     2,
   );
+
   assert.equal(plan.active, true);
+  assert.equal(plan.direction, "LONG");
   assert.deepEqual(plan.rawSuffixes, [18, 62]);
   assert.deepEqual(plan.validSuffixes, [18, 62]);
   assert.deepEqual(
@@ -74,7 +80,7 @@ test("green QQQ candle creates an immutable shadow-only Berto plan", () => {
   assert.equal(plan.executionEnabled, false);
 });
 
-test("a pre-window touch stays armed and a 15:30 Rome touch is discarded for the day", () => {
+test("a pre-window crossing leaves a level armed, while a 15:30 Rome crossing discards it", () => {
   const armed = evaluateFirstTouch(
     { price: 7_462, state: "ARMED" },
     { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:29:00.000Z" },
@@ -88,16 +94,14 @@ test("a pre-window touch stays armed and a 15:30 Rome touch is discarded for the
     "LONG",
   );
   assert.equal(discarded.state, "DISCARDED_1530_TOUCH");
-
-  const unchanged = evaluateFirstTouch(
+  assert.equal(discarded.firstTouchedAt, "2026-09-24T13:30:00.000Z");
+  assert.equal(
+    evaluateFirstTouch(discarded, { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" }, "LONG"),
     discarded,
-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
-    "LONG",
   );
-  assert.equal(unchanged.state, "DISCARDED_1530_TOUCH");
 });
 
-test("first touch after 15:30 Rome precedes breakout and retest; untouched levels expire at 21:55", () => {
+test("a correct post-15:30 Rome approach touches, then breakout and retest fill; untouched levels expire at 21:55", () => {
   const touched = evaluateFirstTouch(
     { price: 7_462, state: "ARMED" },
     { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
@@ -117,9 +121,16 @@ test("first touch after 15:30 Rome precedes breakout and retest; untouched level
   const retest = markRetestFilled(breakout, "2026-09-24T13:33:00.000Z");
   assert.equal(retest.state, "RETEST_FILLED");
 
+  const wrongApproach = evaluateFirstTouch(
+    { price: 7_462, state: "ARMED" },
+    { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
+  );
+  assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
+
   const expired = evaluateFirstTouch(
     { price: 7_362, state: "ARMED" },
-    { low: 7_500, high: 7_501, previousClose: 7_500, at: "2026-09-24T19:55:00.000Z" },
+    { low: 7_499, high: 7_501, previousClose: 7_498, at: "2026-09-24T19:55:00.000Z" },
     "LONG",
   );
   assert.equal(expired.state, "EXPIRED");
