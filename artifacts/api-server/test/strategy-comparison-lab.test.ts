@@ -136,6 +136,49 @@ test("a correct post-15:30 Rome approach touches, then breakout and retest fill;
   assert.equal(expired.state, "EXPIRED");
 });
 
+test("BERTO entry and expiry follow Rome daylight saving time across both clock changes", () => {
+  // Weekdays immediately before and after the 2026 spring and autumn clock changes.
+  const sessions = [
+    { date: "2026-03-27", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
+    { date: "2026-03-30", offset: "CEST (UTC+2)", entryUtc: "13:30", exitUtc: "19:55" },
+    { date: "2026-10-23", offset: "CEST (UTC+2)", entryUtc: "13:30", exitUtc: "19:55" },
+    { date: "2026-10-26", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
+  ] as const;
+  const level = { price: 7_462, state: "ARMED" as const };
+  const candleAt = (at: string) => ({ low: 7_461, high: 7_463, previousClose: 7_460, at });
+  const minuteBefore = (iso: string) => new Date(Date.parse(iso) - 60_000).toISOString();
+  const minuteAfter = (iso: string) => new Date(Date.parse(iso) + 60_000).toISOString();
+
+  for (const { date, offset, entryUtc, exitUtc } of sessions) {
+    const entry = `${date}T${entryUtc}:00.000Z`;
+    const exit = `${date}T${exitUtc}:00.000Z`;
+    const context = `${date} ${offset}`;
+    const romeTime = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Rome",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    assert.equal(romeTime.format(new Date(entry)), "15:30", `${context} entry UTC mapping`);
+    assert.equal(romeTime.format(new Date(exit)), "21:55", `${context} exit UTC mapping`);
+
+    const beforeEntry = evaluateFirstTouch(level, candleAt(minuteBefore(entry)), "LONG");
+    assert.equal(beforeEntry.state, "ARMED", `${context} 15:29 crossing`);
+    const atEntry = evaluateFirstTouch(beforeEntry, candleAt(entry), "LONG");
+    assert.equal(atEntry.state, "DISCARDED_1530_TOUCH", `${context} 15:30 crossing`);
+    assert.equal(atEntry.firstTouchedAt, entry);
+    assert.equal(evaluateFirstTouch(atEntry, candleAt(minuteAfter(entry)), "LONG"), atEntry);
+
+    const afterEntry = evaluateFirstTouch(level, candleAt(minuteAfter(entry)), "LONG");
+    assert.equal(afterEntry.state, "TOUCHED", `${context} 15:31 approach`);
+    assert.equal(afterEntry.firstTouchedAt, minuteAfter(entry));
+
+    assert.equal(evaluateFirstTouch(level, candleAt(minuteBefore(exit)), "LONG").state, "TOUCHED", `${context} 21:54 approach`);
+    assert.equal(evaluateFirstTouch(level, candleAt(exit), "LONG").state, "EXPIRED", `${context} 21:55 crossing`);
+    assert.equal(evaluateFirstTouch(level, candleAt(minuteAfter(exit)), "LONG").state, "EXPIRED", `${context} 21:56 crossing`);
+  }
+});
+
 test("comparison lab keeps equal capital and isolated metrics", () => {
   const snapshot = buildComparisonSnapshot(5_000, [
     {
