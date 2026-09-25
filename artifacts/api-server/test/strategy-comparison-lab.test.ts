@@ -215,6 +215,15 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
       assert.equal(atEntry.firstTouchedAt, entry, `${caseContext} discarded at 15:30`);
       assert.equal(evaluateFirstTouch(atEntry, candleAt(minuteAfter(entry), direction), direction), atEntry);
 
+      const outsideAtEntry = direction === "LONG"
+        ? { low: 7_459, high: 7_461, previousClose: 7_460, at: entry }
+        : { low: 7_463, high: 7_465, previousClose: 7_464, at: entry };
+      const stillArmed = evaluateFirstTouch(level, outsideAtEntry, direction);
+      assert.deepEqual(stillArmed, level, `${caseContext} 15:30 candle outside level stays ARMED without a touch timestamp`);
+      const laterTouch = evaluateFirstTouch(stillArmed, candleAt(minuteAfter(entry), direction), direction);
+      assert.equal(laterTouch.state, "TOUCHED", `${caseContext} untouched level can be touched at 15:31`);
+      assert.equal(laterTouch.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch is recorded at 15:31`);
+
       const afterEntry = evaluateFirstTouch(level, candleAt(minuteAfter(entry), direction), direction);
       assert.equal(afterEntry.state, "TOUCHED", `${caseContext} 15:31 approach`);
       assert.equal(afterEntry.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch from ${direction === "SHORT" ? "above" : "below"}`);
