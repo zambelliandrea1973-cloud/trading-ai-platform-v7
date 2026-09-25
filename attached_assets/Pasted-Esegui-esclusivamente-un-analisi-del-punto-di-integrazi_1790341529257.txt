@@ -1,0 +1,20 @@
+Esegui esclusivamente un'analisi del punto di integrazione BERTO nella github/main. Non modificare ancora alcun file.
+
+Obiettivo finale: sostituire completamente la vecchia strategia BERTO della main con la nuova strategia definitiva già verificata nel branch rebuild/berto-latest-spec, senza mantenere due motori BERTO concorrenti.
+
+Analizza github/main e individua ogni import, chiamata, route, servizio, scheduler, comparator, dashboard o altro componente che utilizza bertoStrategyEngine.ts o le sue funzioni.
+Ricostruisci il flusso completo: dati QQQ → BERTO → generazione segnale/ordine SHADOW → comparator/metriche/dashboard.
+Elenca tutte le dipendenze del vecchio bertoStrategyEngine.ts.
+Confronta l'interfaccia del vecchio motore con quella finale di bertoGoldenSetup.ts presente in rebuild/berto-latest-spec.
+Determina quali adattamenti minimi sono necessari affinché la nuova BERTO possa sostituire realmente la vecchia senza modificare le altre strategie.
+Verifica che rimanga invariata la sorgente dati QQQ/Investing prevista dal progetto.
+La nuova BERTO deve mantenere esclusivamente le specifiche definitive già approvate: America/New_York, sessione 09:30–15:55, DST automatico, festività USA, early-close 12:55, SL 13, TP 22 dall'ingresso, MaxDist 50.
+Individua quali parti della vecchia logica overshoot/retest 4–8 e breakout 13–15 diventerebbero obsolete e potrebbero essere eliminate dopo la sostituzione.
+Verifica che il passaggio non tocchi broker MT5, schema/database, migrazioni, credenziali, modalità LIVE o altre strategie.
+Proponi un piano di sostituzione file per file, indicando per ciascuno: KEEP, MODIFY, ADD oppure REMOVE, con motivazione.
+
+Non eseguire checkout distruttivi, merge, cherry-pick, rebase, reset, modifiche, commit, push, migrazioni/database push o Republish.
+
+Importante: non creare adattatori o funzioni mancanti per supposizione. Se la nuova BERTO richiede informazioni o comportamenti non definiti dalle specifiche definitive, fermati e indicami esattamente cosa manca prima di proporre l'implementazione.
+
+Alla fine mostrami il percorso di esecuzione BERTO attuale, il percorso proposto con la nuova BERTO, l'elenco dei file interessati e gli eventuali punti che richiedono una mia decisione.
