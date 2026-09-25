@@ -1,0 +1,397 @@
+SPECIFICA DEFINITIVA BERTO — per Trading AI Platform V7
+
+Regola fondamentale per Replit: questa specifica è prescrittiva. Non deve reinterpretare, ottimizzare o completare autonomamente la strategia. Se un comportamento necessario non è definito qui o nel codice già verificato di bertoGoldenSetup.ts, deve fermarsi e chiedere.
+
+1. Strumenti e flusso dati
+
+BERTO utilizza due strumenti con funzioni differenti:
+
+QQQ
+
+serve esclusivamente per determinare direzione della giornata e livelli BERTO;
+per la nostra V7 la sorgente QQQ deve essere la pagina Investing già scelta:
+https://www.investing.com/etfs/powershares-qqqq;
+deve essere utilizzata la candela giornaliera completa dell'ultimo giorno di negoziazione USA precedente alla sessione da operare;
+dati necessari: Open, High, Low, Close;
+se la candela corretta non è disponibile, BERTO non opera.
+
+S&P 500 / US500
+
+è lo strumento sul quale BERTO osserva il mercato e simula i trade;
+timeframe M1;
+il bot originale utilizza direttamente OHLC e prezzi del grafico M1 S&P 500/US500 del broker;
+non scarica US500 da Yahoo o Investing.
+
+Il PDF conferma che il bot originale lavora sul grafico S&P 500 M1 e che i livelli derivano dal QQQ del giorno precedente.
+
+2. Calendario e sessione
+
+Tutta la logica temporale deve essere riferita a:
+
+America/New_York
+
+Non devono essere codificati manualmente gli equivalenti italiani.
+
+Sessione normale:
+
+09:30 ≤ operatività < 15:55 New York
+
+Alle 15:55:
+
+nessun nuovo ingresso;
+tutti i trade BERTO SHADOW ancora aperti vengono chiusi;
+tutti i setup pendenti vengono invalidati;
+nessuna posizione BERTO rimane overnight.
+
+Early close USA:
+
+09:30 ≤ operatività < 12:55 New York
+
+Weekend e festività USA: nessuna operatività.
+
+DST deve seguire automaticamente New York. Il comportamento corrisponde alla descrizione del bot originale.
+
+3. Determinazione LONG/SHORT dal QQQ
+
+Dalla candela QQQ precedente:
+
+Close > Open → giornata LONG only
+Close < Open → giornata SHORT only
+Close == Open → nessun trade BERTO
+
+Questa direzione è vincolante.
+
+Una giornata LONG non può generare SHORT.
+
+Una giornata SHORT non può generare LONG.
+
+4. Costruzione dei livelli BERTO
+
+Dal QQQ vengono estratti i centesimi di:
+
+Low
+High
+
+Esempio concettuale: se il Low termina in .37, il suffisso è 37.
+
+I livelli S&P 500 vengono costruiti mantenendo quel suffisso ogni 100 punti.
+
+Il .mq4 genera quindi la famiglia:
+
+...xx37 → ...xx37 + 100 → ...xx37 + 200...
+
+e analogamente per il suffisso derivato dall'altro estremo QQQ.
+
+Suffissi molto vicini
+
+Se la distanza circolare tra i due suffissi è <10:
+
+giornata LONG → conservare il suffisso numericamente più basso;
+giornata SHORT → conservare il suffisso numericamente più alto.
+
+Altrimenti vengono utilizzati entrambi.
+
+Questa è una regola esplicita del sorgente BERTO; non deve essere sostituita con la vecchia logica V7 4–8 / 13–15.
+
+5. Apertura US500
+
+L'apertura della giornata è:
+
+Open della prima candela M1 US500 appartenente alla sessione dalle 09:30 New York.
+
+Questa diventa sessionOpen.
+
+Serve al filtro MaxDist.
+
+6. MaxDist = 50
+
+Un livello BERTO è operativo soltanto quando:
+
+abs(level - sessionOpen) <= 50
+
+Se supera 50 punti:
+
+livello definitivamente escluso per quella giornata.
+
+Il PDF conferma il filtro di 50 punti rispetto all'apertura USA.
+
+7. Primo tocco
+
+Per ogni livello viene considerato soltanto il primo tocco della giornata.
+
+Una candela M1 tocca il livello quando:
+
+Low <= level <= High
+
+Una volta avvenuto il primo tocco, quel livello viene marcato come utilizzato.
+
+Eccezione fondamentale: candela 09:30
+
+Se il livello viene toccato dalla prima candela M1 della sessione (09:30):
+
+il livello viene scartato completamente per quella giornata.
+
+Non si aspetta un secondo tocco.
+
+Questo comportamento è esplicitamente descritto nel bot e nel PDF.
+
+8. Lato di provenienza
+
+Al primo tocco valido bisogna utilizzare la chiusura della candela M1 precedente.
+
+Se:
+
+previousClose < level
+
+il prezzo arriva dal basso → candidato LONG.
+
+Se:
+
+previousClose > level
+
+il prezzo arriva dall'alto → candidato SHORT.
+
+Se:
+
+previousClose == level
+
+nessuna direzione valida → livello scartato.
+
+Poi questa direzione deve coincidere con il colore QQQ:
+
+QQQ verde + arrivo dal basso → setup LONG valido;
+QQQ rosso + arrivo dall'alto → setup SHORT valido;
+qualsiasi altra combinazione → livello scartato.
+9. Breakout ±8 — DA MANTENERE
+
+Questo è un punto che ora abbiamo verificato direttamente nel .mq4.
+
+Dopo il primo tocco valido non si entra sul livello.
+
+LONG:
+
+entryLevel = level + 8
+
+SHORT:
+
+entryLevel = level - 8
+
+Il bot attende che il prezzo raggiunga questo livello.
+
+Questo ±8 appartiene alla strategia BERTO definitiva.
+
+Non deve essere confuso con la vecchia logica V7:
+
+overshoot/retest 4–8 / breakout 13–15
+
+Quella vecchia logica deve essere eliminata.
+
+10. Condizione di ingresso
+
+LONG viene attivato quando:
+
+Ask >= level + 8
+
+SHORT quando:
+
+Bid <= level - 8
+
+Nella V7 SHADOW bisogna utilizzare l'equivalente disponibile nel feed/simulatore senza inventare una semantica differente.
+
+Anti-chase
+
+Il bot originale contiene inoltre una regola precisa:
+
+MaxChase = 2 punti
+
+Se al momento in cui viene rilevato il trigger il prezzo è già oltre l'ingresso teorico di più di 2 punti, il trade viene saltato.
+
+LONG:
+
+Ask - entryLevel > 2 → NO TRADE
+
+SHORT:
+
+entryLevel - Bid > 2 → NO TRADE
+
+[VERIFIED — sorgente .mq4] Questa regola è presente nel codice originale.
+
+Non va eliminata senza tua decisione esplicita.
+
+11. Spread massimo
+
+Il bot originale contiene:
+
+MaxSpread = 2 punti
+
+Se:
+
+Ask - Bid > 2
+
+il trade viene saltato.
+
+[VERIFIED — sorgente .mq4]
+
+Se la simulazione V7 non dispone di Bid/Ask o spread affidabile, Replit deve fermarsi e segnalarlo. Non deve inventare uno spread.
+
+12. Stop Loss
+
+SL = 13 punti dall'ingresso effettivo/teorico
+
+LONG:
+
+SL = entry - 13
+
+SHORT:
+
+SL = entry + 13
+
+Confermato anche dal PDF.
+
+13. Take Profit
+
+Il bot definisce TP a 30 punti dal livello BERTO.
+
+Poiché l'ingresso è ±8:
+
+30 - 8 = 22
+
+quindi:
+
+TP = +22 punti dall'ingresso.
+
+LONG:
+
+TP = entry + 22
+
+SHORT:
+
+TP = entry - 22
+
+Il PDF lo specifica esplicitamente.
+
+14. Un solo trade per livello
+
+Ogni livello può produrre al massimo un trade per giornata.
+
+Dopo:
+
+primo tocco non valido,
+setup incompatibile,
+livello fuori MaxDist,
+breakout già avvenuto,
+trade eseguito,
+
+il livello non deve essere riciclato per cercare una seconda opportunità.
+
+15. Riavvio/interruzione
+
+Questa parte è importante.
+
+Il bot originale, dopo un'interruzione:
+
+aspetta 90 secondi;
+ricostruisce la giornata leggendo lo storico M1;
+identifica livelli già toccati;
+identifica breakout già avvenuti;
+non insegue un breakout avvenuto mentre era offline;
+mantiene utilizzabili soltanto setup ancora realmente validi.
+
+Il PDF descrive lo stesso comportamento.
+
+Nella V7 questa logica deve essere replicata solo nella misura compatibile con SHADOW e con i dati M1 disponibili. Non deve introdurre persistenza database senza nostra autorizzazione.
+
+16. Fine sessione
+
+Alle 15:55 NY, oppure 12:55 nelle early-close:
+
+chiudere trade BERTO SHADOW aperti;
+annullare eventuali ordini/setup pendenti;
+marcare conclusi i setup della giornata;
+nessun nuovo ingresso;
+nessun overnight.
+17. Cosa NON appartiene alla nuova BERTO
+
+Deve essere eliminato dalla strategia definitiva qualsiasi comportamento proveniente dal vecchio bertoStrategyEngine.ts basato su:
+
+overshoot/retest 4–8 + breakout 13–15
+
+se non appartiene alle regole sopra.
+
+Non devono coesistere:
+
+bertoStrategyEngine.ts
+
+e
+
+bertoGoldenSetup.ts
+
+come due motori BERTO alternativi.
+
+Una volta collegato e verificato il nuovo percorso, il vecchio motore diventa legacy da rimuovere.
+
+18. SHADOW: vincolo assoluto nella V7
+
+Il bot MT4 originale può inviare ordini reali. La nostra implementazione no.
+
+La V7 deve replicarne la logica decisionale ma:
+
+executionEnabled = false
+
+decisionInfluence = false
+
+BERTO deve produrre esclusivamente:
+
+segnali / ordini simulati / trade SHADOW / metriche
+
+Nessun OrderSend equivalente deve raggiungere MT5 LIVE.
+
+Nessuna modifica a:
+
+broker MT5;
+credenziali;
+modalità LIVE;
+schema database;
+migrazioni;
+altre strategie.
+19. Metriche e confronto
+
+Soltanto trade BERTO realmente simulati attraverso questo percorso devono alimentare le metriche.
+
+Non utilizzare risultati statici o backtest precompilati come se fossero risultati runtime.
+
+Il PDF riporta il backtest storico di riferimento — 97 trade, circa 51% vincenti, +14,6%, max drawdown −3,5%, PF 1,47 — ma questi valori sono benchmark storico, non valori da inserire artificialmente nella dashboard.
+
+Vincolo sulla sorgente QQQ
+
+Qui c'è una sola deviazione intenzionale dal bot originale.
+
+Il bot utilizza Yahoo Finance automaticamente. Il PDF lo conferma.
+
+Per nostra decisione progettuale la V7 deve invece utilizzare Investing.com QQQ.
+
+Quindi:
+
+NON copiare dal .mq4 il downloader Yahoo.
+
+La logica strategica rimane BERTO; cambia soltanto la sorgente della candela QQQ.
+
+Istruzione da mettere in testa al lavoro Replit
+
+Ti consiglio di anteporre questo blocco alla specifica:
+
+Questa è la specifica BERTO definitiva e sostituisce tutte le precedenti istruzioni BERTO presenti nel progetto.
+
+Implementa esclusivamente le regole descritte nella specifica. Non dedurre nuove regole dai vecchi test, dai vecchi file BERTO, dalla dashboard, dai task precedenti o dal vecchio bertoStrategyEngine.ts.
+
+Il comportamento deriva dal sorgente originale BreakoutQQQ_v4_auto.mq4 e dalla relativa documentazione BERTO, con le sole variazioni esplicitamente indicate.
+
+Se trovi una contraddizione tra questa specifica e il codice legacy, prevale questa specifica.
+
+Se manca un'informazione necessaria all'implementazione, FERMATI e chiedi conferma. Non creare fallback, provider, adattatori, valori, formule o comportamenti per supposizione.
+
+Prima di modificare il codice verifica esclusivamente una cosa: se la V7 dispone già di un feed US500/SPX500 M1 con OHLC e, per le regole spread/trigger, Bid/Ask o spread equivalente.
+
+Se tale feed non esiste, fermati senza modificare nulla e indicami esattamente cosa manca.
+
+Se esiste, implementa il percorso BERTO con il minimo numero possibile di modifiche. Non modificare MT5 LIVE, database/schema/migrazioni, credenziali o altre strategie. Non eseguire Republish.
