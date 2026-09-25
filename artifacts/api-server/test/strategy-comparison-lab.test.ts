@@ -5,11 +5,12 @@ import {
   buildBertoOrders,
   buildLevels,
   centSuffix,
+  closeBertoSession,
   createBertoDailyPlan,
   declusterSuffixes,
+  evaluateBertoPositionExit,
   evaluateFirstTouch,
-  markBreakoutFilled,
-  markRetestFilled,
+  fillBertoPending,
 } from "../src/lib/bertoGoldenSetup";
 import {
   buildComparisonSnapshot,
@@ -70,8 +71,8 @@ test("green QQQ candle creates a LONG shadow-only Berto plan with Rome session r
   assert.deepEqual(plan.rawSuffixes, [18, 62]);
   assert.deepEqual(plan.validSuffixes, [18, 62]);
   assert.deepEqual(
-    [plan.rules.breakoutPoints, plan.rules.retestPoints, plan.rules.stopOffsetPoints, plan.rules.takeProfitOffsetPoints],
-    [8, 3, 5, 30],
+    [plan.rules.contracts, plan.rules.breakoutPoints, plan.rules.stopOffsetPoints, plan.rules.takeProfitOffsetPoints],
+    [1, 8, 5, 30],
   );
   assert.equal(plan.rules.timezone, "Europe/Rome");
   assert.equal(plan.rules.entryWindowStart, "15:30");
@@ -101,25 +102,27 @@ test("a pre-window crossing leaves a level armed, while a 15:30 Rome crossing di
   );
 });
 
-test("a correct post-15:30 Rome approach touches, then breakout and retest fill; untouched levels expire at 21:55", () => {
-  const touched = evaluateFirstTouch(
+test("a valid LONG first touch creates a linked one-contract BUY STOP immediately", () => {
+  const pending = evaluateFirstTouch(
     { price: 7_462, state: "ARMED" },
     { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
     "LONG",
   );
-  assert.equal(touched.state, "TOUCHED");
-  const orders = buildBertoOrders(touched.price, "LONG");
-  assert.deepEqual(orders, {
+  assert.equal(pending.state, "PENDING_STOP");
+  assert.equal(pending.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+  assert.deepEqual(pending.order, {
     direction: "LONG",
-    breakoutStop: 7_470,
-    retestLimit: 7_465,
+    kind: "STOP",
+    contracts: 1,
+    entryStop: 7_470,
     stopLoss: 7_457,
     takeProfit: 7_492,
   });
-  const breakout = markBreakoutFilled(touched, "2026-09-24T13:32:00.000Z");
-  assert.equal(breakout.state, "BREAKOUT_FILLED");
-  const retest = markRetestFilled(breakout, "2026-09-24T13:33:00.000Z");
-  assert.equal(retest.state, "RETEST_FILLED");
+  assert.equal(fillBertoPending(pending, { low: 7_461, high: 7_470, at: "2026-09-24T13:31:00.000Z" }), pending);
+  const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: "2026-09-24T13:32:00.000Z" });
+  assert.equal(open.state, "POSITION_OPEN");
+  assert.equal(open.positionOpenedAt, "2026-09-24T13:32:00.000Z");
+  assert.equal(evaluateFirstTouch(open, { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:33:00.000Z" }, "LONG"), open);
 
   const wrongApproach = evaluateFirstTouch(
     { price: 7_462, state: "ARMED" },
@@ -127,6 +130,7 @@ test("a correct post-15:30 Rome approach touches, then breakout and retest fill;
     "LONG",
   );
   assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
+  assert.equal(wrongApproach.order, undefined);
 
   const expired = evaluateFirstTouch(
     { price: 7_362, state: "ARMED" },
@@ -136,7 +140,7 @@ test("a correct post-15:30 Rome approach touches, then breakout and retest fill;
   assert.equal(expired.state, "EXPIRED");
 });
 
-test("a SHORT plan touches from above, rejects an approach from below, and builds mirrored orders", () => {
+test("a SHORT plan creates a one-contract SELL STOP from above and rejects an approach from below", () => {
   const plan = createBertoDailyPlan(
     { open: 724, high: 737.62, low: 723.18, close: 723.99 },
     7_529.55,
@@ -147,24 +151,26 @@ test("a SHORT plan touches from above, rejects an approach from below, and build
   const level = plan.levels.find((candidate) => candidate.price === 7_462);
   assert(level);
 
-  const touched = evaluateFirstTouch(
+  const pending = evaluateFirstTouch(
     level,
     { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
     plan.direction,
   );
-  assert.equal(touched.state, "TOUCHED");
-  assert.equal(touched.firstTouchedAt, "2026-09-24T13:31:00.000Z");
-  assert.deepEqual(buildBertoOrders(touched.price, plan.direction), {
+  assert.equal(pending.state, "PENDING_STOP");
+  assert.equal(pending.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+  assert.deepEqual(pending.order, {
     direction: "SHORT",
-    breakoutStop: 7_454,
-    retestLimit: 7_459,
+    kind: "STOP",
+    contracts: 1,
+    entryStop: 7_454,
     stopLoss: 7_467,
     takeProfit: 7_432,
   });
-  const breakout = markBreakoutFilled(touched, "2026-09-24T13:32:00.000Z");
-  assert.equal(breakout.state, "BREAKOUT_FILLED");
-  const retest = markRetestFilled(breakout, "2026-09-24T13:33:00.000Z");
-  assert.equal(retest.state, "RETEST_FILLED");
+  assert.deepEqual(buildBertoOrders(pending.price, plan.direction), pending.order);
+  assert.equal(fillBertoPending(pending, { low: 7_455, high: 7_464, at: "2026-09-24T13:32:00.000Z" }), pending);
+  const open = fillBertoPending(pending, { low: 7_454, high: 7_464, at: "2026-09-24T13:33:00.000Z" });
+  assert.equal(open.state, "POSITION_OPEN");
+  assert.equal(open.positionOpenedAt, "2026-09-24T13:33:00.000Z");
 
   const wrongApproach = evaluateFirstTouch(
     level,
@@ -173,6 +179,7 @@ test("a SHORT plan touches from above, rejects an approach from below, and build
   );
   assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
   assert.equal(wrongApproach.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+  assert.equal(wrongApproach.order, undefined);
 });
 
 test("BERTO entry and expiry follow Rome daylight saving time across both clock changes", () => {
@@ -221,15 +228,16 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
       const stillArmed = evaluateFirstTouch(level, outsideAtEntry, direction);
       assert.deepEqual(stillArmed, level, `${caseContext} 15:30 candle outside level stays ARMED without a touch timestamp`);
       const laterTouch = evaluateFirstTouch(stillArmed, candleAt(minuteAfter(entry), direction), direction);
-      assert.equal(laterTouch.state, "TOUCHED", `${caseContext} untouched level can be touched at 15:31`);
+      assert.equal(laterTouch.state, "PENDING_STOP", `${caseContext} untouched level can be touched at 15:31`);
       assert.equal(laterTouch.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch is recorded at 15:31`);
+      assert.equal(laterTouch.order?.direction, direction, `${caseContext} correct pending STOP direction`);
 
       const afterEntry = evaluateFirstTouch(level, candleAt(minuteAfter(entry), direction), direction);
-      assert.equal(afterEntry.state, "TOUCHED", `${caseContext} 15:31 approach`);
+      assert.equal(afterEntry.state, "PENDING_STOP", `${caseContext} 15:31 approach`);
       assert.equal(afterEntry.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch from ${direction === "SHORT" ? "above" : "below"}`);
 
       const beforeExit = evaluateFirstTouch(level, candleAt(minuteBefore(exit), direction), direction);
-      assert.equal(beforeExit.state, "TOUCHED", `${caseContext} 21:54 approach`);
+      assert.equal(beforeExit.state, "PENDING_STOP", `${caseContext} 21:54 approach`);
       assert.equal(beforeExit.firstTouchedAt, minuteBefore(exit), `${caseContext} 21:54 first touch`);
       assert.equal(evaluateFirstTouch(level, candleAt(exit, direction), direction).state, "EXPIRED", `${caseContext} 21:55 crossing`);
       assert.equal(evaluateFirstTouch(level, candleAt(minuteAfter(exit), direction), direction).state, "EXPIRED", `${caseContext} 21:56 crossing`);
@@ -237,96 +245,103 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
   }
 });
 
-test("BERTO stops recording breakout and retest fills at 21:55 Rome time in CET and CEST", () => {
+test("LONG and SHORT positions close at their linked SL or TP; simultaneous barriers count as SL", () => {
+  for (const direction of ["LONG", "SHORT"] as const) {
+    const pending = evaluateFirstTouch(
+      { price: 7_462, state: "ARMED" },
+      { low: 7_461, high: 7_463, previousClose: direction === "LONG" ? 7_460 : 7_464, at: "2026-09-24T13:31:00.000Z" },
+      direction,
+    );
+    const open = fillBertoPending(pending, {
+      low: direction === "LONG" ? 7_463 : 7_454,
+      high: direction === "LONG" ? 7_470 : 7_461,
+      at: "2026-09-24T13:32:00.000Z",
+    });
+    assert.equal(open.state, "POSITION_OPEN");
+    assert.equal(evaluateBertoPositionExit(open, { low: 7_430, high: 7_495, at: "2026-09-24T13:32:00.000Z" }), open, "no same-candle exit");
+    assert(open.order);
+    const stop = evaluateBertoPositionExit(open, {
+      low: direction === "LONG" ? open.order.stopLoss : 7_440,
+      high: direction === "SHORT" ? open.order.stopLoss : 7_460,
+      at: "2026-09-24T13:33:00.000Z",
+    });
+    assert.equal(stop.state, "CLOSED_STOP_LOSS");
+    assert.equal(stop.pnlPoints, -13);
+    assert.equal(stop.exitPrice, open.order.stopLoss);
+    const profit = evaluateBertoPositionExit(open, {
+      low: direction === "SHORT" ? open.order.takeProfit : 7_470,
+      high: direction === "LONG" ? open.order.takeProfit : 7_454,
+      at: "2026-09-24T13:33:00.000Z",
+    });
+    assert.equal(profit.state, "CLOSED_TAKE_PROFIT");
+    assert.equal(profit.pnlPoints, 22);
+    assert.equal(profit.exitPrice, open.order.takeProfit);
+    assert.equal(evaluateBertoPositionExit(open, { low: 7_430, high: 7_495, at: "2026-09-24T13:33:00.000Z" }).state, "CLOSED_STOP_LOSS");
+    assert.equal(evaluateBertoPositionExit(stop, { low: 7_430, high: 7_495, at: "2026-09-24T13:34:00.000Z" }), stop);
+  }
+});
+
+test("unfilled pending orders are cancelled and open positions are closed at market at 21:55 Rome", () => {
+  const at = "2026-09-24T19:55:00.000Z";
+  const pending = evaluateFirstTouch(
+    { price: 7_462, state: "ARMED" },
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
+  );
+  assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_469, at: "2026-09-24T13:32:00.000Z" }), pending);
+  const shortPending = evaluateFirstTouch(
+    { price: 7_562, state: "ARMED" },
+    { low: 7_561, high: 7_563, previousClose: 7_564, at: "2026-09-24T13:31:00.000Z" },
+    "SHORT",
+  );
+  const open = fillBertoPending(shortPending, { low: 7_554, high: 7_560, at: "2026-09-24T13:32:00.000Z" });
+  assert.equal(open.state, "POSITION_OPEN");
+  const levels = [pending, open, { price: 7_662, state: "ARMED" as const }];
+  assert.equal(closeBertoSession(levels, "2026-09-24T19:54:00.000Z", 7_550), levels);
+  const closed = closeBertoSession(levels, at, 7_550);
+  assert.deepEqual(closed.map((level) => level.state), ["CANCELLED_2155", "CLOSED_FORCED", "EXPIRED"]);
+  assert.equal(closed[0]?.closedAt, at);
+  assert.equal(closed[1]?.exitPrice, 7_550);
+  assert.equal(closed[1]?.pnlPoints, 4);
+  assert.deepEqual(closeBertoSession(closed, at, 7_550), closed, "session close is idempotent");
+  assert.equal(fillBertoPending(closed[0]!, { low: 7_460, high: 7_480, at }), closed[0], "cancelled pending cannot reopen");
+  assert.equal(evaluateBertoPositionExit(closed[1]!, { low: 7_430, high: 7_580, at }), closed[1], "forced close is final");
+});
+
+test("no pending STOP fills or SL/TP exits at or after 21:55 in CET and CEST", () => {
   const sessions = [
-    { date: "2026-03-27", offset: "CET", exitUtc: "20:55" },
-    { date: "2026-03-30", offset: "CEST", exitUtc: "19:55" },
-    { date: "2026-10-23", offset: "CEST", exitUtc: "19:55" },
-    { date: "2026-10-26", offset: "CET", exitUtc: "20:55" },
+    { date: "2026-03-27", exitUtc: "20:55" },
+    { date: "2026-03-30", exitUtc: "19:55" },
+    { date: "2026-10-23", exitUtc: "19:55" },
+    { date: "2026-10-26", exitUtc: "20:55" },
   ] as const;
-
-  for (const { date, offset, exitUtc } of sessions) {
-    const exit = `${date}T${exitUtc}:00.000Z`;
-    const justBefore = new Date(Date.parse(exit) - 1).toISOString();
-    const after = new Date(Date.parse(exit) + 60_000).toISOString();
-    const context = `${date} ${offset}`;
-    const touched = { price: 7_462, state: "TOUCHED" as const, firstTouchedAt: justBefore };
-    const breakout = markBreakoutFilled(touched, justBefore);
-    assert.deepEqual(breakout, { ...touched, state: "BREAKOUT_FILLED", breakoutFilledAt: justBefore }, `${context} breakout before exit`);
-    const retest = markRetestFilled(breakout, justBefore);
-    assert.deepEqual(retest, { ...breakout, state: "RETEST_FILLED", retestFilledAt: justBefore }, `${context} retest before exit`);
-
-    for (const at of [exit, after]) {
-      assert.equal(markBreakoutFilled(touched, at), touched, `${context} breakout blocked at ${at}`);
-      assert.equal(markRetestFilled(breakout, at), breakout, `${context} retest blocked at ${at}`);
+  for (const { date, exitUtc } of sessions) {
+    const at = `${date}T${exitUtc}:00.000Z`;
+    const firstTouchedAt = new Date(Date.parse(at) - 120_000).toISOString();
+    const filledAt = new Date(Date.parse(at) - 60_000).toISOString();
+    const pending = {
+      price: 7_462, state: "PENDING_STOP" as const, firstTouchedAt,
+      order: buildBertoOrders(7_462, "LONG"),
+    };
+    const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
+    assert.equal(open.state, "POSITION_OPEN");
+    for (const blockedAt of [at, new Date(Date.parse(at) + 60_000).toISOString(), new Date(Date.parse(at) + 18 * 60 * 60_000).toISOString()]) {
+      assert.equal(fillBertoPending(pending, { low: 7_450, high: 7_490, at: blockedAt }), pending);
+      assert.equal(evaluateBertoPositionExit(open, { low: 7_450, high: 7_495, at: blockedAt }), open);
     }
-    const nextSession = new Date(Date.parse(exit) + 18 * 60 * 60_000).toISOString();
-    assert.equal(markBreakoutFilled(touched, nextSession), touched, `${context} no next-day breakout on stale touch`);
-    assert.equal(markRetestFilled(breakout, nextSession), breakout, `${context} no next-day retest on stale breakout`);
+    assert.deepEqual(closeBertoSession([pending, open], at, 7_468).map((level) => level.state), ["CANCELLED_2155", "CLOSED_FORCED"]);
   }
 });
 
-test("BERTO does not fill legacy states without a session timestamp", () => {
-  const nextSession = "2026-09-25T13:32:00.000Z"; // 15:32 Rome, before the daily cutoff
-  const sameSession = "2026-09-24T13:32:00.000Z";
-  const legacyTouch = { price: 7_462, state: "TOUCHED" as const };
-  const legacyBreakout = { price: 7_462, state: "BREAKOUT_FILLED" as const };
-
-  for (const at of [sameSession, nextSession]) {
-    assert.equal(markBreakoutFilled(legacyTouch, at), legacyTouch, `touch without time stays unchanged at ${at}`);
-    assert.equal(markRetestFilled(legacyBreakout, at), legacyBreakout, `breakout without time stays unchanged at ${at}`);
-  }
-
-  const breakoutOnly = { ...legacyBreakout, breakoutFilledAt: sameSession };
-  assert.deepEqual(markRetestFilled(breakoutOnly, sameSession), {
-    ...breakoutOnly,
-    state: "RETEST_FILLED",
-    retestFilledAt: sameSession,
-  }, "a legacy breakout with a timestamp can still fill during its own session");
-  assert.equal(markRetestFilled(breakoutOnly, nextSession), breakoutOnly,
-    "the breakout timestamp prevents a next-day retest even without a touch timestamp");
-
-  const touchOnly = { ...legacyBreakout, firstTouchedAt: sameSession };
-  assert.deepEqual(markRetestFilled(touchOnly, sameSession), {
-    ...touchOnly,
-    state: "RETEST_FILLED",
-    retestFilledAt: sameSession,
-  }, "a legacy breakout without its own timestamp can use its touch timestamp");
-  assert.equal(markRetestFilled(touchOnly, nextSession), touchOnly,
-    "the touch timestamp prevents a next-day retest when the breakout timestamp is missing");
-});
-
-test("BERTO rejects backdated fills but accepts equal or later timestamps", () => {
-  const touched = {
-    price: 7_462,
-    state: "TOUCHED" as const,
-    firstTouchedAt: "2026-09-24T13:31:30.500Z",
-  };
-  const earlier = "2026-09-24T13:31:30.499Z";
-  assert.equal(markBreakoutFilled(touched, earlier), touched, "breakout before first touch leaves state unchanged");
-
-  const equalBreakout = markBreakoutFilled(touched, touched.firstTouchedAt);
-  assert.deepEqual(equalBreakout, {
-    ...touched,
-    state: "BREAKOUT_FILLED",
-    breakoutFilledAt: touched.firstTouchedAt,
-  });
-  assert.equal(markRetestFilled(equalBreakout, earlier), equalBreakout, "retest before breakout leaves state unchanged");
-  assert.deepEqual(markRetestFilled(equalBreakout, touched.firstTouchedAt), {
-    ...equalBreakout,
-    state: "RETEST_FILLED",
-    retestFilledAt: touched.firstTouchedAt,
-  });
-
-  const laterBreakout = markBreakoutFilled(touched, "2026-09-24T13:32:00.000Z");
-  assert.equal(laterBreakout.state, "BREAKOUT_FILLED");
-  assert.equal(markRetestFilled(laterBreakout, touched.firstTouchedAt), laterBreakout,
-    "retest after touch but before breakout leaves state unchanged");
-  assert.deepEqual(markRetestFilled(laterBreakout, "2026-09-24T13:32:00.001Z"), {
-    ...laterBreakout,
-    state: "RETEST_FILLED",
-    retestFilledAt: "2026-09-24T13:32:00.001Z",
-  });
+test("BERTO refuses fills without a session anchor or before the first touch", () => {
+  const at = "2026-09-24T13:32:00.000Z";
+  const unanchored = { price: 7_462, state: "PENDING_STOP" as const, order: buildBertoOrders(7_462, "LONG") };
+  assert.equal(fillBertoPending(unanchored, { low: 7_463, high: 7_470, at }), unanchored);
+  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
+  assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_470, at }), pending);
+  assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_470, at: "2026-09-25T13:34:00.000Z" }), pending);
+  const openWithoutTime = { ...unanchored, state: "POSITION_OPEN" as const };
+  assert.equal(evaluateBertoPositionExit(openWithoutTime, { low: 7_457, high: 7_492, at }), openWithoutTime);
 });
 
 test("comparison lab keeps equal capital and isolated metrics", () => {

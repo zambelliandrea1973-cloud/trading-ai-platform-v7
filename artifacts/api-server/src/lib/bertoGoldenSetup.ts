@@ -1,6 +1,6 @@
 export const BERTO_RULES = {
   id: "BERTO_QQQ_BREAKOUT_RETEST",
-  version: "2.0.0",
+  version: "3.0.0",
   signalSymbol: "QQQ",
   executionSymbol: "US500",
   timezone: "Europe/Rome",
@@ -8,9 +8,8 @@ export const BERTO_RULES = {
   entryWindowStart: "15:30",
   forcedExit: "21:55",
   timeframe: "1m",
-  contracts: 2,
+  contracts: 1,
   breakoutPoints: 8,
-  retestPoints: 3,
   stopOffsetPoints: 5,
   takeProfitOffsetPoints: 30,
   suffixClusterDistance: 10,
@@ -63,24 +62,30 @@ export type BertoLevelStatus =
   | "ARMED"
   | "DISCARDED_1530_TOUCH"
   | "DISCARDED_WRONG_APPROACH"
-  | "TOUCHED"
-  | "BREAKOUT_FILLED"
-  | "RETEST_FILLED"
-  | "CLOSED"
+  | "PENDING_STOP"
+  | "POSITION_OPEN"
+  | "CLOSED_STOP_LOSS"
+  | "CLOSED_TAKE_PROFIT"
+  | "CLOSED_FORCED"
+  | "CANCELLED_2155"
   | "EXPIRED";
 
 export interface BertoLevelState {
   price: number;
   state: BertoLevelStatus;
   firstTouchedAt?: string;
-  breakoutFilledAt?: string;
-  retestFilledAt?: string;
+  order?: BertoOrders;
+  positionOpenedAt?: string;
+  closedAt?: string;
+  exitPrice?: number;
+  pnlPoints?: number;
 }
 
 export interface BertoOrders {
   direction: Exclude<BertoDirection, "NONE">;
-  breakoutStop: number;
-  retestLimit: number;
+  kind: "STOP";
+  contracts: 1;
+  entryStop: number;
   stopLoss: number;
   takeProfit: number;
 }
@@ -177,16 +182,18 @@ export function buildBertoOrders(level: number, direction: Exclude<BertoDirectio
   if (direction === "LONG") {
     return {
       direction,
-      breakoutStop: level + BERTO_RULES.breakoutPoints,
-      retestLimit: level + BERTO_RULES.retestPoints,
+      kind: "STOP",
+      contracts: 1,
+      entryStop: level + BERTO_RULES.breakoutPoints,
       stopLoss: level - BERTO_RULES.stopOffsetPoints,
       takeProfit: level + BERTO_RULES.takeProfitOffsetPoints,
     };
   }
   return {
     direction,
-    breakoutStop: level - BERTO_RULES.breakoutPoints,
-    retestLimit: level - BERTO_RULES.retestPoints,
+    kind: "STOP",
+    contracts: 1,
+    entryStop: level - BERTO_RULES.breakoutPoints,
     stopLoss: level + BERTO_RULES.stopOffsetPoints,
     takeProfit: level - BERTO_RULES.takeProfitOffsetPoints,
   };
@@ -207,14 +214,11 @@ export function evaluateFirstTouch(
   const correctApproach = direction === "LONG"
     ? candle.previousClose < current.price
     : candle.previousClose > current.price;
-  return {
-    ...current,
-    state: correctApproach ? "TOUCHED" : "DISCARDED_WRONG_APPROACH",
-    firstTouchedAt: candle.at,
-  };
+  if (!correctApproach) return { ...current, state: "DISCARDED_WRONG_APPROACH", firstTouchedAt: candle.at };
+  return { ...current, state: "PENDING_STOP", firstTouchedAt: candle.at, order: buildBertoOrders(current.price, direction) };
 }
 
-/** Compatibility wrapper: tracks a quote touch only. New executions must use evaluateFirstTouch + buildBertoOrders. */
+/** A quote alone has no previous candle close, so it cannot authorize a pending order. */
 export function evaluateLevelTouch(
   current: BertoLevelState,
   quote: { ask: number; at: string },
@@ -227,21 +231,61 @@ export function evaluateLevelTouch(
   if (minute >= exit) return { ...current, state: "EXPIRED" };
   if (minute < entryStart || quote.ask !== current.price) return current;
   if (minute === entryStart) return { ...current, state: "DISCARDED_1530_TOUCH", firstTouchedAt: quote.at };
-  return { ...current, state: "TOUCHED", firstTouchedAt: quote.at };
+  return current;
 }
 
-export function markBreakoutFilled(current: BertoLevelState, at: string): BertoLevelState {
-  if (current.state !== "TOUCHED") return current;
-  if (!isWithinBertoSession(at, current.firstTouchedAt)) return current;
-  if (current.firstTouchedAt && Date.parse(at) < Date.parse(current.firstTouchedAt)) return current;
-  return { ...current, state: "BREAKOUT_FILLED", breakoutFilledAt: at };
+export function fillBertoPending(
+  current: BertoLevelState,
+  candle: { low: number; high: number; at: string },
+): BertoLevelState {
+  if (current.state !== "PENDING_STOP" || !current.order || !current.firstTouchedAt) return current;
+  if (!isWithinBertoSession(candle.at, current.firstTouchedAt)) return current;
+  // One-minute OHLC cannot establish whether a breakout preceded the first touch in the same candle.
+  if (Date.parse(candle.at) <= Date.parse(current.firstTouchedAt)) return current;
+  const crossed = current.order.direction === "LONG"
+    ? candle.high >= current.order.entryStop
+    : candle.low <= current.order.entryStop;
+  return crossed ? { ...current, state: "POSITION_OPEN", positionOpenedAt: candle.at } : current;
 }
 
-export function markRetestFilled(current: BertoLevelState, at: string): BertoLevelState {
-  if (current.state !== "BREAKOUT_FILLED") return current;
-  if (!isWithinBertoSession(at, current.firstTouchedAt ?? current.breakoutFilledAt)) return current;
-  if (current.breakoutFilledAt && Date.parse(at) < Date.parse(current.breakoutFilledAt)) return current;
-  return { ...current, state: "RETEST_FILLED", retestFilledAt: at };
+export function evaluateBertoPositionExit(
+  current: BertoLevelState,
+  candle: { low: number; high: number; at: string },
+): BertoLevelState {
+  if (current.state !== "POSITION_OPEN" || !current.order || !current.positionOpenedAt) return current;
+  if (!isWithinBertoSession(candle.at, current.positionOpenedAt)) return current;
+  // Do not infer the intraminute path from the entry candle's OHLC.
+  if (Date.parse(candle.at) <= Date.parse(current.positionOpenedAt)) return current;
+  const { direction, stopLoss, takeProfit } = current.order;
+  const stopped = direction === "LONG" ? candle.low <= stopLoss : candle.high >= stopLoss;
+  const won = direction === "LONG" ? candle.high >= takeProfit : candle.low <= takeProfit;
+  if (!stopped && !won) return current;
+  // A candle touching both barriers is conservatively counted as a stop loss.
+  return closePosition(current, candle.at, stopped ? stopLoss : takeProfit, stopped ? "CLOSED_STOP_LOSS" : "CLOSED_TAKE_PROFIT");
+}
+
+/** Shadow-only end-of-session transition; the caller supplies the observed market price for open positions. */
+export function closeBertoSession(levels: BertoLevelState[], at: string, marketPrice: number): BertoLevelState[] {
+  assertFinitePositive(marketPrice, "Market close price");
+  if (romeMinuteOfDay(at) < 21 * 60 + 55) return levels;
+  return levels.map((level) => {
+    if (level.state === "ARMED") return { ...level, state: "EXPIRED" };
+    if (!level.firstTouchedAt || !sameRomeDate(at, level.firstTouchedAt)) return level;
+    if (level.state === "PENDING_STOP") return { ...level, state: "CANCELLED_2155", closedAt: at };
+    if (level.state === "POSITION_OPEN") return closePosition(level, at, marketPrice, "CLOSED_FORCED");
+    return level;
+  });
+}
+
+function closePosition(
+  current: BertoLevelState,
+  at: string,
+  exitPrice: number,
+  state: "CLOSED_STOP_LOSS" | "CLOSED_TAKE_PROFIT" | "CLOSED_FORCED",
+): BertoLevelState {
+  if (!current.order) return current;
+  const sign = current.order.direction === "LONG" ? 1 : -1;
+  return { ...current, state, closedAt: at, exitPrice, pnlPoints: round((exitPrice - current.order.entryStop) * sign) };
 }
 
 function basePlan(sessionOpen: number) {
@@ -266,10 +310,15 @@ function assertFinitePositive(value: number, label: string): void {
 }
 
 function isWithinBertoSession(at: string, startedAt?: string): boolean {
-  if (romeMinuteOfDay(at) >= 21 * 60 + 55) return false;
+  const minute = romeMinuteOfDay(at);
+  if (minute < 15 * 60 + 30 || minute >= 21 * 60 + 55) return false;
   // Legacy states without a touch or breakout timestamp cannot prove which session they belong to.
   // Keep their recorded state, but do not create a new fill without a session anchor.
   if (!startedAt) return false;
+  return sameRomeDate(at, startedAt);
+}
+
+function sameRomeDate(at: string, startedAt: string): boolean {
   const romeDate = new Intl.DateTimeFormat("en-CA", {
     timeZone: BERTO_RULES.timezone,
     year: "numeric",
