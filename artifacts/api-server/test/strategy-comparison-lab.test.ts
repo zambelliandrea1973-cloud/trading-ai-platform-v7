@@ -218,6 +218,35 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
   }
 });
 
+test("BERTO stops recording breakout and retest fills at 21:55 Rome time in CET and CEST", () => {
+  const sessions = [
+    { date: "2026-03-27", offset: "CET", exitUtc: "20:55" },
+    { date: "2026-03-30", offset: "CEST", exitUtc: "19:55" },
+    { date: "2026-10-23", offset: "CEST", exitUtc: "19:55" },
+    { date: "2026-10-26", offset: "CET", exitUtc: "20:55" },
+  ] as const;
+
+  for (const { date, offset, exitUtc } of sessions) {
+    const exit = `${date}T${exitUtc}:00.000Z`;
+    const justBefore = new Date(Date.parse(exit) - 1).toISOString();
+    const after = new Date(Date.parse(exit) + 60_000).toISOString();
+    const context = `${date} ${offset}`;
+    const touched = { price: 7_462, state: "TOUCHED" as const, firstTouchedAt: justBefore };
+    const breakout = markBreakoutFilled(touched, justBefore);
+    assert.deepEqual(breakout, { ...touched, state: "BREAKOUT_FILLED", breakoutFilledAt: justBefore }, `${context} breakout before exit`);
+    const retest = markRetestFilled(breakout, justBefore);
+    assert.deepEqual(retest, { ...breakout, state: "RETEST_FILLED", retestFilledAt: justBefore }, `${context} retest before exit`);
+
+    for (const at of [exit, after]) {
+      assert.equal(markBreakoutFilled(touched, at), touched, `${context} breakout blocked at ${at}`);
+      assert.equal(markRetestFilled(breakout, at), breakout, `${context} retest blocked at ${at}`);
+    }
+    const nextSession = new Date(Date.parse(exit) + 18 * 60 * 60_000).toISOString();
+    assert.equal(markBreakoutFilled(touched, nextSession), touched, `${context} no next-day breakout on stale touch`);
+    assert.equal(markRetestFilled(breakout, nextSession), breakout, `${context} no next-day retest on stale breakout`);
+  }
+});
+
 test("comparison lab keeps equal capital and isolated metrics", () => {
   const snapshot = buildComparisonSnapshot(5_000, [
     {

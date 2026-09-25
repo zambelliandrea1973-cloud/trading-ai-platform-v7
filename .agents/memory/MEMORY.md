@@ -8,3 +8,4 @@
 - [Git alignment diffing](git-alignment-diffing.md) — detect real upstream drift by diffing recursive blob SHAs, not commit messages or file counts alone.
 - [Broker read-status persistence](broker-read-status-persistence.md) — preserve broker endpoint outcomes with singleton, endpoint-specific atomic writes; never overwrite a whole snapshot.
 - [Encoded asset path parameters](encoded-asset-path-parameters.md) — generated client path parameters are not URL-encoded; encode slash-bearing symbols before calling asset hooks.
+- [BERTO session-close behavior](berto-session-close.md) — after 21:55 Rome time, reject new fills on started setups without changing their recorded state.

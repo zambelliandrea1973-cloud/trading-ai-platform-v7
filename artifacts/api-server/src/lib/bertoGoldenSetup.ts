@@ -232,11 +232,13 @@ export function evaluateLevelTouch(
 
 export function markBreakoutFilled(current: BertoLevelState, at: string): BertoLevelState {
   if (current.state !== "TOUCHED") return current;
+  if (!isWithinBertoSession(at, current.firstTouchedAt)) return current;
   return { ...current, state: "BREAKOUT_FILLED", breakoutFilledAt: at };
 }
 
 export function markRetestFilled(current: BertoLevelState, at: string): BertoLevelState {
   if (current.state !== "BREAKOUT_FILLED") return current;
+  if (!isWithinBertoSession(at, current.firstTouchedAt ?? current.breakoutFilledAt)) return current;
   return { ...current, state: "RETEST_FILLED", retestFilledAt: at };
 }
 
@@ -259,6 +261,18 @@ function normalizeSuffix(value: number): number {
 
 function assertFinitePositive(value: number, label: string): void {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number.`);
+}
+
+function isWithinBertoSession(at: string, startedAt?: string): boolean {
+  if (romeMinuteOfDay(at) >= 21 * 60 + 55) return false;
+  if (!startedAt) return true;
+  const romeDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BERTO_RULES.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return romeDate.format(new Date(at)) === romeDate.format(new Date(startedAt));
 }
 
 function romeMinuteOfDay(isoTimestamp: string): number {
