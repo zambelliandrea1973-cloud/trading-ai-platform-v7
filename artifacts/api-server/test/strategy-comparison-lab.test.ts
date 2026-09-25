@@ -51,8 +51,10 @@ test("green QQQ candle creates an immutable shadow-only Berto plan", () => {
   assert.equal(plan.active, true);
   assert.deepEqual(plan.rawSuffixes, [18, 62]);
   assert.deepEqual(plan.validSuffixes, [18, 62]);
-  assert.equal(plan.rules.stopLossPoints, 31);
-  assert.equal(plan.rules.takeProfitPoints, 89);
+  assert.deepEqual(
+    [plan.rules.breakoutPoints, plan.rules.retestPoints, plan.rules.stopOffsetPoints, plan.rules.takeProfitOffsetPoints],
+    [8, 3, 5, 30],
+  );
   assert.equal(plan.rules.timezone, "America/New_York");
   assert.equal(plan.mode, "SHADOW");
   assert.equal(plan.executionEnabled, false);
