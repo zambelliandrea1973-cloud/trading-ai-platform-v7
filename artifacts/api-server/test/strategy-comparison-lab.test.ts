@@ -48,7 +48,7 @@ test("QQQ suffix extraction and circular de-clustering follow the fixed rules", 
 });
 
 test("level grid includes levels on both sides of the session open without a distance cutoff", () => {
-  const levels = [pending, open, { price: 7_662, state: "ARMED" as const }];
+  const levels = buildLevels(7_529.55, [18, 62], 3);
   assert.deepEqual(
     levels.map((level) => level.price),
     [7_218, 7_262, 7_318, 7_362, 7_418, 7_462, 7_518, 7_562, 7_618, 7_662, 7_718, 7_762, 7_818, 7_862],
@@ -61,8 +61,9 @@ test("level grid includes levels on both sides of the session open without a dis
 
 test("green QQQ candle creates a LONG shadow-only Berto plan with Rome session rules", () => {
   const plan = createBertoDailyPlan(
-    { open: 724, high: 737.62, low: 723.18, close: 723.99 },
+    { open: 724, high: 737.62, low: 724.18, close: 735 },
     7_529.55,
+    2,
   );
 
   assert.equal(plan.active, true);
@@ -88,13 +89,11 @@ test("a pre-window crossing leaves a level armed, while a 15:30 Rome crossing di
   );
   assert.equal(armed.state, "ARMED");
 
-      const discarded = evaluateFirstTouch(level, { ...candle, at: entry }, direction);
-
-      const untouched = evaluateFirstTouch(
-        level,
-        { low: outsideLow, high: outsideHigh, previousClose, at: entry },
-        direction,
-      );
+  const discarded = evaluateFirstTouch(
+    armed,
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:30:00.000Z" },
+    "LONG",
+  );
   assert.equal(discarded.state, "DISCARDED_1530_TOUCH");
   assert.equal(discarded.firstTouchedAt, "2026-09-24T13:30:00.000Z");
   assert.equal(
@@ -104,27 +103,31 @@ test("a pre-window crossing leaves a level armed, while a 15:30 Rome crossing di
 });
 
 test("a valid LONG first touch creates a linked one-contract BUY STOP immediately", () => {
-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
+  const pending = evaluateFirstTouch(
+    { price: 7_462, state: "ARMED" },
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
+  );
   assert.equal(pending.state, "PENDING_STOP");
   assert.equal(pending.firstTouchedAt, "2026-09-24T13:31:00.000Z");
   assert.deepEqual(pending.order, {
-    direction: "SHORT",
+    direction: "LONG",
     kind: "STOP",
     contracts: 1,
-    entryStop: 7_454,
-    stopLoss: 7_467,
-    takeProfit: 7_432,
+    entryStop: 7_470,
+    stopLoss: 7_457,
+    takeProfit: 7_492,
   });
-  assert.deepEqual(buildBertoOrders(pending.price, plan.direction), pending.order);
-  assert.equal(fillBertoPending(pending, { low: 7_455, high: 7_464, at: "2026-09-24T13:32:00.000Z" }), pending);
-    const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
+  assert.equal(fillBertoPending(pending, { low: 7_461, high: 7_470, at: "2026-09-24T13:31:00.000Z" }), pending);
+  const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: "2026-09-24T13:32:00.000Z" });
   assert.equal(open.state, "POSITION_OPEN");
-  assert.equal(open.positionOpenedAt, "2026-09-24T13:33:00.000Z");
+  assert.equal(open.positionOpenedAt, "2026-09-24T13:32:00.000Z");
+  assert.equal(evaluateFirstTouch(open, { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:33:00.000Z" }, "LONG"), open);
 
   const wrongApproach = evaluateFirstTouch(
-    level,
-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
-    plan.direction,
+    { price: 7_462, state: "ARMED" },
+    { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
   );
   assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
   assert.equal(wrongApproach.order, undefined);
@@ -145,10 +148,14 @@ test("a SHORT plan creates a one-contract SELL STOP from above and rejects an ap
   assert.equal(plan.direction, "SHORT");
   assert.equal(plan.mode, "SHADOW");
   assert.equal(plan.executionEnabled, false);
-  const level = { price: 7_462, state: "ARMED" as const };
+  const level = plan.levels.find((candidate) => candidate.price === 7_462);
   assert(level);
 
-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
+  const pending = evaluateFirstTouch(
+    level,
+    { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
+    plan.direction,
+  );
   assert.equal(pending.state, "PENDING_STOP");
   assert.equal(pending.firstTouchedAt, "2026-09-24T13:31:00.000Z");
   assert.deepEqual(pending.order, {
@@ -161,7 +168,7 @@ test("a SHORT plan creates a one-contract SELL STOP from above and rejects an ap
   });
   assert.deepEqual(buildBertoOrders(pending.price, plan.direction), pending.order);
   assert.equal(fillBertoPending(pending, { low: 7_455, high: 7_464, at: "2026-09-24T13:32:00.000Z" }), pending);
-    const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
+  const open = fillBertoPending(pending, { low: 7_454, high: 7_464, at: "2026-09-24T13:33:00.000Z" });
   assert.equal(open.state, "POSITION_OPEN");
   assert.equal(open.positionOpenedAt, "2026-09-24T13:33:00.000Z");
 
@@ -178,17 +185,10 @@ test("a SHORT plan creates a one-contract SELL STOP from above and rejects an ap
 test("BERTO entry and expiry follow Rome daylight saving time across both clock changes", () => {
   // Weekdays immediately before and after the 2026 spring and autumn clock changes.
   const sessions = [
-    { date: "2026-03-27", exitUtc: "20:55" },
-    { date: "2026-03-30", exitUtc: "19:55" },
-    { date: "2026-10-23", exitUtc: "19:55" },
-    { date: "2026-10-26", exitUtc: "20:55" },
-  ] as const;
-
-  const cases = [
-    { direction: "LONG", edge: "low", low: 7_462, high: 7_463, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
-    { direction: "LONG", edge: "high", low: 7_461, high: 7_462, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
-    { direction: "SHORT", edge: "low", low: 7_462, high: 7_463, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
-    { direction: "SHORT", edge: "high", low: 7_461, high: 7_462, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
+    { date: "2026-03-27", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
+    { date: "2026-03-30", offset: "CEST (UTC+2)", entryUtc: "13:30", exitUtc: "19:55" },
+    { date: "2026-10-23", offset: "CEST (UTC+2)", entryUtc: "13:30", exitUtc: "19:55" },
+    { date: "2026-10-26", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
   ] as const;
   const level = { price: 7_462, state: "ARMED" as const };
   const candleAt = (at: string, direction: "LONG" | "SHORT") => ({
@@ -202,12 +202,8 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
 
   for (const { date, offset, entryUtc, exitUtc } of sessions) {
     const entry = `${date}T${entryUtc}:00.000Z`;
-
-    const later = new Date(Date.parse(entry) + 60_000).toISOString();
     const exit = `${date}T${exitUtc}:00.000Z`;
     const context = `${date} ${offset}`;
-
-      const candle = { low, high, previousClose };
     const romeTime = new Intl.DateTimeFormat("en-GB", {
       timeZone: "Europe/Rome",
       hour: "2-digit",
@@ -249,10 +245,53 @@ test("BERTO entry and expiry follow Rome daylight saving time across both clock 
   }
 });
 
+test("exact candle-edge contacts at 15:30 Rome discard a level, while an untouched level can arm later", () => {
+  const sessions = [
+    { date: "2026-03-27", entryUtc: "14:30" },
+    { date: "2026-03-30", entryUtc: "13:30" },
+    { date: "2026-10-23", entryUtc: "13:30" },
+    { date: "2026-10-26", entryUtc: "14:30" },
+  ] as const;
+  const cases = [
+    { direction: "LONG", edge: "low", low: 7_462, high: 7_463, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
+    { direction: "LONG", edge: "high", low: 7_461, high: 7_462, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
+    { direction: "SHORT", edge: "low", low: 7_462, high: 7_463, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
+    { direction: "SHORT", edge: "high", low: 7_461, high: 7_462, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
+  ] as const;
+  const level = { price: 7_462, state: "ARMED" as const };
+  for (const { date, entryUtc } of sessions) {
+    const entry = `${date}T${entryUtc}:00.000Z`;
+    const later = new Date(Date.parse(entry) + 60_000).toISOString();
+    for (const { direction, edge, low, high, previousClose, outsideLow, outsideHigh } of cases) {
+      const context = `${date} ${direction} ${edge}`;
+      const candle = { low, high, previousClose };
+      const discarded = evaluateFirstTouch(level, { ...candle, at: entry }, direction);
+      assert.equal(discarded.state, "DISCARDED_1530_TOUCH", context);
+      assert.equal(discarded.firstTouchedAt, entry, context);
+      assert.equal(discarded.order, undefined, context);
+      assert.equal(evaluateFirstTouch(discarded, { ...candle, at: later }, direction), discarded, context);
+
+      const untouched = evaluateFirstTouch(level, {
+        low: outsideLow, high: outsideHigh, previousClose, at: entry,
+      }, direction);
+      assert.deepEqual(untouched, level, context);
+      assert.equal(evaluateFirstTouch(untouched, { ...candle, at: later }, direction).state, "PENDING_STOP", context);
+    }
+  }
+});
+
 test("LONG and SHORT positions close at their linked SL or TP; simultaneous barriers count as SL", () => {
   for (const direction of ["LONG", "SHORT"] as const) {
-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
-    const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
+    const pending = evaluateFirstTouch(
+      { price: 7_462, state: "ARMED" },
+      { low: 7_461, high: 7_463, previousClose: direction === "LONG" ? 7_460 : 7_464, at: "2026-09-24T13:31:00.000Z" },
+      direction,
+    );
+    const open = fillBertoPending(pending, {
+      low: direction === "LONG" ? 7_463 : 7_454,
+      high: direction === "LONG" ? 7_470 : 7_461,
+      at: "2026-09-24T13:32:00.000Z",
+    });
     assert.equal(open.state, "POSITION_OPEN");
     assert.equal(evaluateBertoPositionExit(open, { low: 7_430, high: 7_495, at: "2026-09-24T13:32:00.000Z" }), open, "no same-candle exit");
     assert(open.order);
@@ -278,15 +317,19 @@ test("LONG and SHORT positions close at their linked SL or TP; simultaneous barr
 });
 
 test("unfilled pending orders are cancelled and open positions are closed at market at 21:55 Rome", () => {
-  const at = "2026-09-24T13:32:00.000Z";
-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
+  const at = "2026-09-24T19:55:00.000Z";
+  const pending = evaluateFirstTouch(
+    { price: 7_462, state: "ARMED" },
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
+  );
   assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_469, at: "2026-09-24T13:32:00.000Z" }), pending);
   const shortPending = evaluateFirstTouch(
     { price: 7_562, state: "ARMED" },
     { low: 7_561, high: 7_563, previousClose: 7_564, at: "2026-09-24T13:31:00.000Z" },
     "SHORT",
   );
-    const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
+  const open = fillBertoPending(shortPending, { low: 7_554, high: 7_560, at: "2026-09-24T13:32:00.000Z" });
   assert.equal(open.state, "POSITION_OPEN");
   const levels = [pending, open, { price: 7_662, state: "ARMED" as const }];
   assert.equal(closeBertoSession(levels, "2026-09-24T19:54:00.000Z", 7_550), levels);
@@ -308,17 +351,14 @@ test("no pending STOP fills or SL/TP exits at or after 21:55 in CET and CEST", (
     { date: "2026-10-26", exitUtc: "20:55" },
   ] as const;
 
-  const cases = [
-    { direction: "LONG", edge: "low", low: 7_462, high: 7_463, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
-    { direction: "LONG", edge: "high", low: 7_461, high: 7_462, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
-    { direction: "SHORT", edge: "low", low: 7_462, high: 7_463, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
-    { direction: "SHORT", edge: "high", low: 7_461, high: 7_462, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
-  ] as const;
   for (const { date, exitUtc } of sessions) {
-  const at = "2026-09-24T13:32:00.000Z";
+    const at = `${date}T${exitUtc}:00.000Z`;
     const firstTouchedAt = new Date(Date.parse(at) - 120_000).toISOString();
     const filledAt = new Date(Date.parse(at) - 60_000).toISOString();
-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
+    const pending = {
+      price: 7_462, state: "PENDING_STOP" as const, firstTouchedAt,
+      order: buildBertoOrders(7_462, "LONG"),
+    };
     const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
     assert.equal(open.state, "POSITION_OPEN");
     for (const blockedAt of [at, new Date(Date.parse(at) + 60_000).toISOString(), new Date(Date.parse(at) + 18 * 60 * 60_000).toISOString()]) {
@@ -403,7 +443,3 @@ test("performance metrics include net return, profit factor, expectancy and draw
   assert(metrics.maxDrawdownPct > 0);
   assert.equal(BERTO_RULES.executionEnabled, false);
 });
-
-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
-
-  const at = "2026-09-24T13:32:00.000Z";
