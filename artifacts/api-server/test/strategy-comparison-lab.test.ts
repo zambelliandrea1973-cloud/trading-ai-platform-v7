@@ -2,26 +2,37 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BERTO_RULES,
+  buildBertoOrders,
   buildLevels,
   centSuffix,
   createBertoDailyPlan,
   declusterSuffixes,
-  evaluateLevelTouch,
+  evaluateFirstTouch,
+  markBreakoutFilled,
+  markRetestFilled,
 } from "../src/lib/bertoGoldenSetup";
 import {
   buildComparisonSnapshot,
   calculateMetrics,
 } from "../src/lib/strategyComparisonLab";
 
-test("Berto setup suspends the next session unless previous QQQ candle is green", () => {
+test("a red QQQ candle creates a SHORT shadow plan; a doji suspends it", () => {
   const plan = createBertoDailyPlan(
     { open: 724, high: 737.62, low: 724.18, close: 723.99 },
     7_529.55,
   );
-  assert.equal(plan.active, false);
-  assert.equal(plan.suspensionReason, "QQQ_PREVIOUS_CANDLE_NOT_GREEN");
+  assert.equal(plan.active, true);
+  assert.equal(plan.direction, "SHORT");
+  assert.equal(plan.suspensionReason, undefined);
   assert.equal(plan.executionEnabled, false);
   assert.equal(plan.decisionInfluence, false);
+
+  const doji = createBertoDailyPlan(
+    { open: 724, high: 737.62, low: 724.18, close: 724 },
+    7_529.55,
+  );
+  assert.equal(doji.active, false);
+  assert.equal(doji.suspensionReason, "QQQ_PREVIOUS_CANDLE_DOJI");
 });
 
 test("QQQ suffix extraction and circular de-clustering follow the fixed rules", () => {
@@ -32,14 +43,15 @@ test("QQQ suffix extraction and circular de-clustering follow the fixed rules", 
   assert.deepEqual(declusterSuffixes([18, 62]), [18, 62]);
 });
 
-test("level grid keeps only levels below open and at least twenty points away", () => {
+test("level grid spans both sides of the open at the configured depth", () => {
   const levels = buildLevels(7_529.55, [18, 62], 3);
   assert.deepEqual(
     levels.map((level) => level.price),
-    [7_462, 7_418, 7_362, 7_318, 7_262],
+    [7_218, 7_262, 7_318, 7_362, 7_418, 7_462, 7_518, 7_562, 7_618, 7_662, 7_718, 7_762, 7_818, 7_862],
   );
-  assert(levels.every((level) => level.price < 7_529.55));
-  assert(levels.every((level) => level.distanceFromOpen >= 20));
+  assert(levels.some((level) => level.price < 7_529.55));
+  assert(levels.some((level) => level.price > 7_529.55));
+  assert(levels.every((level) => level.distanceFromOpen === Number(Math.abs(level.price - 7_529.55).toFixed(6))));
 });
 
 test("green QQQ candle creates an immutable shadow-only Berto plan", () => {
@@ -55,35 +67,60 @@ test("green QQQ candle creates an immutable shadow-only Berto plan", () => {
     [plan.rules.breakoutPoints, plan.rules.retestPoints, plan.rules.stopOffsetPoints, plan.rules.takeProfitOffsetPoints],
     [8, 3, 5, 30],
   );
-  assert.equal(plan.rules.timezone, "America/New_York");
+  assert.equal(plan.rules.timezone, "Europe/Rome");
+  assert.equal(plan.rules.entryWindowStart, "15:30");
+  assert.equal(plan.rules.forcedExit, "21:55");
   assert.equal(plan.mode, "SHADOW");
   assert.equal(plan.executionEnabled, false);
 });
 
-test("a pre-window first touch invalidates the level for the whole day", () => {
-  const invalidated = evaluateLevelTouch(
+test("a pre-window touch stays armed and a 15:30 Rome touch is discarded for the day", () => {
+  const armed = evaluateFirstTouch(
     { price: 7_462, state: "ARMED" },
-    { ask: 7_461.9, at: "2026-09-24T13:45:00.000Z" },
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:29:00.000Z" },
+    "LONG",
   );
-  assert.equal(invalidated.state, "INVALIDATED_PRE_WINDOW");
+  assert.equal(armed.state, "ARMED");
 
-  const unchanged = evaluateLevelTouch(
-    invalidated,
-    { ask: 7_461.8, at: "2026-09-24T14:05:00.000Z" },
+  const discarded = evaluateFirstTouch(
+    armed,
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:30:00.000Z" },
+    "LONG",
   );
-  assert.equal(unchanged.state, "INVALIDATED_PRE_WINDOW");
+  assert.equal(discarded.state, "DISCARDED_1530_TOUCH");
+
+  const unchanged = evaluateFirstTouch(
+    discarded,
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
+  );
+  assert.equal(unchanged.state, "DISCARDED_1530_TOUCH");
 });
 
-test("first touch after 10:00 New York enters once and 15:55 expires untouched levels", () => {
-  const entered = evaluateLevelTouch(
+test("first touch after 15:30 Rome precedes breakout and retest; untouched levels expire at 21:55", () => {
+  const touched = evaluateFirstTouch(
     { price: 7_462, state: "ARMED" },
-    { ask: 7_462, at: "2026-09-24T14:00:00.000Z" },
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+    "LONG",
   );
-  assert.equal(entered.state, "ENTERED");
+  assert.equal(touched.state, "TOUCHED");
+  const orders = buildBertoOrders(touched.price, "LONG");
+  assert.deepEqual(orders, {
+    direction: "LONG",
+    breakoutStop: 7_470,
+    retestLimit: 7_465,
+    stopLoss: 7_457,
+    takeProfit: 7_492,
+  });
+  const breakout = markBreakoutFilled(touched, "2026-09-24T13:32:00.000Z");
+  assert.equal(breakout.state, "BREAKOUT_FILLED");
+  const retest = markRetestFilled(breakout, "2026-09-24T13:33:00.000Z");
+  assert.equal(retest.state, "RETEST_FILLED");
 
-  const expired = evaluateLevelTouch(
+  const expired = evaluateFirstTouch(
     { price: 7_362, state: "ARMED" },
-    { ask: 7_500, at: "2026-09-24T19:55:00.000Z" },
+    { low: 7_500, high: 7_501, previousClose: 7_500, at: "2026-09-24T19:55:00.000Z" },
+    "LONG",
   );
   assert.equal(expired.state, "EXPIRED");
 });
