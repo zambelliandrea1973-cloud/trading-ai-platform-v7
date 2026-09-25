@@ -257,6 +257,39 @@ test("BERTO stops recording breakout and retest fills at 21:55 Rome time in CET 
   }
 });
 
+test("BERTO rejects backdated fills but accepts equal or later timestamps", () => {
+  const touched = {
+    price: 7_462,
+    state: "TOUCHED" as const,
+    firstTouchedAt: "2026-09-24T13:31:30.500Z",
+  };
+  const earlier = "2026-09-24T13:31:30.499Z";
+  assert.equal(markBreakoutFilled(touched, earlier), touched, "breakout before first touch leaves state unchanged");
+
+  const equalBreakout = markBreakoutFilled(touched, touched.firstTouchedAt);
+  assert.deepEqual(equalBreakout, {
+    ...touched,
+    state: "BREAKOUT_FILLED",
+    breakoutFilledAt: touched.firstTouchedAt,
+  });
+  assert.equal(markRetestFilled(equalBreakout, earlier), equalBreakout, "retest before breakout leaves state unchanged");
+  assert.deepEqual(markRetestFilled(equalBreakout, touched.firstTouchedAt), {
+    ...equalBreakout,
+    state: "RETEST_FILLED",
+    retestFilledAt: touched.firstTouchedAt,
+  });
+
+  const laterBreakout = markBreakoutFilled(touched, "2026-09-24T13:32:00.000Z");
+  assert.equal(laterBreakout.state, "BREAKOUT_FILLED");
+  assert.equal(markRetestFilled(laterBreakout, touched.firstTouchedAt), laterBreakout,
+    "retest after touch but before breakout leaves state unchanged");
+  assert.deepEqual(markRetestFilled(laterBreakout, "2026-09-24T13:32:00.001Z"), {
+    ...laterBreakout,
+    state: "RETEST_FILLED",
+    retestFilledAt: "2026-09-24T13:32:00.001Z",
+  });
+});
+
 test("comparison lab keeps equal capital and isolated metrics", () => {
   const snapshot = buildComparisonSnapshot(5_000, [
     {

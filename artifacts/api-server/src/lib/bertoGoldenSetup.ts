@@ -233,12 +233,14 @@ export function evaluateLevelTouch(
 export function markBreakoutFilled(current: BertoLevelState, at: string): BertoLevelState {
   if (current.state !== "TOUCHED") return current;
   if (!isWithinBertoSession(at, current.firstTouchedAt)) return current;
+  if (current.firstTouchedAt && Date.parse(at) < Date.parse(current.firstTouchedAt)) return current;
   return { ...current, state: "BREAKOUT_FILLED", breakoutFilledAt: at };
 }
 
 export function markRetestFilled(current: BertoLevelState, at: string): BertoLevelState {
   if (current.state !== "BREAKOUT_FILLED") return current;
   if (!isWithinBertoSession(at, current.firstTouchedAt ?? current.breakoutFilledAt)) return current;
+  if (current.breakoutFilledAt && Date.parse(at) < Date.parse(current.breakoutFilledAt)) return current;
   return { ...current, state: "RETEST_FILLED", retestFilledAt: at };
 }
 
