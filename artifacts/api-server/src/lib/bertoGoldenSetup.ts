@@ -267,7 +267,9 @@ function assertFinitePositive(value: number, label: string): void {
 
 function isWithinBertoSession(at: string, startedAt?: string): boolean {
   if (romeMinuteOfDay(at) >= 21 * 60 + 55) return false;
-  if (!startedAt) return true;
+  // Legacy states without a touch or breakout timestamp cannot prove which session they belong to.
+  // Keep their recorded state, but do not create a new fill without a session anchor.
+  if (!startedAt) return false;
   const romeDate = new Intl.DateTimeFormat("en-CA", {
     timeZone: BERTO_RULES.timezone,
     year: "numeric",

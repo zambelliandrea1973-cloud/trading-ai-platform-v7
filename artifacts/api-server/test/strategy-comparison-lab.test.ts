@@ -257,6 +257,36 @@ test("BERTO stops recording breakout and retest fills at 21:55 Rome time in CET 
   }
 });
 
+test("BERTO does not fill legacy states without a session timestamp", () => {
+  const nextSession = "2026-09-25T13:32:00.000Z"; // 15:32 Rome, before the daily cutoff
+  const sameSession = "2026-09-24T13:32:00.000Z";
+  const legacyTouch = { price: 7_462, state: "TOUCHED" as const };
+  const legacyBreakout = { price: 7_462, state: "BREAKOUT_FILLED" as const };
+
+  for (const at of [sameSession, nextSession]) {
+    assert.equal(markBreakoutFilled(legacyTouch, at), legacyTouch, `touch without time stays unchanged at ${at}`);
+    assert.equal(markRetestFilled(legacyBreakout, at), legacyBreakout, `breakout without time stays unchanged at ${at}`);
+  }
+
+  const breakoutOnly = { ...legacyBreakout, breakoutFilledAt: sameSession };
+  assert.deepEqual(markRetestFilled(breakoutOnly, sameSession), {
+    ...breakoutOnly,
+    state: "RETEST_FILLED",
+    retestFilledAt: sameSession,
+  }, "a legacy breakout with a timestamp can still fill during its own session");
+  assert.equal(markRetestFilled(breakoutOnly, nextSession), breakoutOnly,
+    "the breakout timestamp prevents a next-day retest even without a touch timestamp");
+
+  const touchOnly = { ...legacyBreakout, firstTouchedAt: sameSession };
+  assert.deepEqual(markRetestFilled(touchOnly, sameSession), {
+    ...touchOnly,
+    state: "RETEST_FILLED",
+    retestFilledAt: sameSession,
+  }, "a legacy breakout without its own timestamp can use its touch timestamp");
+  assert.equal(markRetestFilled(touchOnly, nextSession), touchOnly,
+    "the touch timestamp prevents a next-day retest when the breakout timestamp is missing");
+});
+
 test("BERTO rejects backdated fills but accepts equal or later timestamps", () => {
   const touched = {
     price: 7_462,
