@@ -1,0 +1,93 @@
+INTERVENTO MIRATO — feed read-only US500 M1 per BERTO
+
+Obiettivo unico: rendere disponibili alla V7, attraverso l'integrazione MT5/broker già esistente, le candele M1 OHLC dell'US500/SPX500, mantenendo l'attuale disponibilità di Bid/Ask. Questo intervento serve esclusivamente a fornire gli input mancanti alla strategia BERTO SHADOW.
+
+Vincoli assoluti
+Non modificare la logica BERTO.
+Non modificare le altre strategie.
+Non abilitare LIVE.
+Non inviare ordini.
+Non modificare credenziali.
+Non modificare schema/database o migrazioni.
+Non aggiungere provider esterni.
+Non ricostruire artificialmente candele M1 da Bid/Ask.
+Non modificare dashboard/comparator.
+Non fare Republish.
+Implementazione richiesta
+
+Usa esclusivamente il collegamento MT5/broker già presente nella V7 e aggiungi la minima capacità read-only necessaria per ottenere, per il simbolo S&P500 configurato nell'account (US500, SPX500 o equivalente già risolto dalla configurazione broker), candele M1 contenenti almeno:
+
+timestamp, open, high, low, close
+
+Mantieni separatamente il feed/quotazione già esistente:
+
+bid, ask, timestamp
+
+Non assumere che il nome del simbolo sia sempre US500: usa il mapping/configurazione simbolo già previsto dall'architettura multi-account. Non creare mapping globali che possano condividere configurazioni tra utenti.
+
+Isolamento account
+
+La richiesta delle candele deve essere eseguita nel broker/account context dell'utente corrente.
+
+Un account A non deve poter leggere connessione, simbolo configurato, dati broker privati o credenziali dell'account B.
+
+Non modificare il sistema di isolamento già implementato: riutilizzalo.
+
+Semantica M1
+
+I dati devono provenire dalle candele M1 native del broker/MT5, non da aggregazione locale di tick.
+
+Preserva il timestamp originale del broker/feed e rendi esplicito quale timezone/UTC rappresenta. Non applicare qui le regole America/New_York: la conversione temporale appartiene a BERTO.
+
+Deve essere possibile richiedere anche uno storico M1 sufficiente a ricostruire la sessione corrente, perché BERTO deve poter determinare:
+
+prima candela della sessione 09:30 New York;
+sessionOpen;
+High/Low di ogni minuto;
+previousClose;
+livelli già toccati;
+breakout eventualmente già avvenuti dopo un'interruzione.
+Fail-closed
+
+Se MT5/broker non fornisce M1 valido, simbolo non risolto, timestamp non valido, OHLC incompleto o connessione/account context non valido:
+
+restituisci errore/no-data e non inventare né interpolare valori.
+
+BERTO dovrà semplicemente risultare non alimentabile.
+
+Prima di scrivere codice
+
+Fai una sola verifica mirata dell'adapter/interfaccia MT5 esistente per individuare il metodo read-only più vicino già disponibile.
+
+Se l'integrazione attuale non consente tecnicamente di richiedere candele/rates M1 native, fermati immediatamente e indicami il limite preciso. Non progettare un provider alternativo.
+
+Se invece è disponibile, implementa direttamente l'estensione minima.
+
+Test richiesti
+
+Dopo l'implementazione verifica esclusivamente:
+
+typecheck;
+test unitari dell'adapter/feed M1;
+account isolation/fail-closed;
+una risposta M1 valida contiene timestamp/open/high/low/close;
+Bid/Ask esistente non viene alterato;
+nessun percorso può inviare ordini;
+build.
+
+Non eseguire test PostgreSQL che scrivono nel database.
+
+Al termine
+
+Riporta:
+
+file modificati;
+metodo MT5/broker utilizzato per ottenere M1;
+formato restituito;
+come viene risolto il simbolo per account;
+quantità/periodo massimo di storico M1 disponibile;
+timezone dei timestamp;
+test PASS/FAIL;
+conferma esplicita che LIVE, ordini, database, BERTO e altre strategie non sono stati modificati.
+
+Non fare commit, push, merge o Republish. Fermati dopo test e build.
