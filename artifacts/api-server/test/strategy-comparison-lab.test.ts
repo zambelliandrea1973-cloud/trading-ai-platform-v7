@@ -136,6 +136,45 @@ test("a correct post-15:30 Rome approach touches, then breakout and retest fill;
   assert.equal(expired.state, "EXPIRED");
 });
 
+test("a SHORT plan touches from above, rejects an approach from below, and builds mirrored orders", () => {
+  const plan = createBertoDailyPlan(
+    { open: 724, high: 737.62, low: 723.18, close: 723.99 },
+    7_529.55,
+  );
+  assert.equal(plan.direction, "SHORT");
+  assert.equal(plan.mode, "SHADOW");
+  assert.equal(plan.executionEnabled, false);
+  const level = plan.levels.find((candidate) => candidate.price === 7_462);
+  assert(level);
+
+  const touched = evaluateFirstTouch(
+    level,
+    { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
+    plan.direction,
+  );
+  assert.equal(touched.state, "TOUCHED");
+  assert.equal(touched.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+  assert.deepEqual(buildBertoOrders(touched.price, plan.direction), {
+    direction: "SHORT",
+    breakoutStop: 7_454,
+    retestLimit: 7_459,
+    stopLoss: 7_467,
+    takeProfit: 7_432,
+  });
+  const breakout = markBreakoutFilled(touched, "2026-09-24T13:32:00.000Z");
+  assert.equal(breakout.state, "BREAKOUT_FILLED");
+  const retest = markRetestFilled(breakout, "2026-09-24T13:33:00.000Z");
+  assert.equal(retest.state, "RETEST_FILLED");
+
+  const wrongApproach = evaluateFirstTouch(
+    level,
+    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+    plan.direction,
+  );
+  assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
+  assert.equal(wrongApproach.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+});
+
 test("BERTO entry and expiry follow Rome daylight saving time across both clock changes", () => {
   // Weekdays immediately before and after the 2026 spring and autumn clock changes.
   const sessions = [
