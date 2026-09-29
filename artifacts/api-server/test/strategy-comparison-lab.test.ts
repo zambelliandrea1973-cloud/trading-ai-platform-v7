@@ -1,141 +1,352 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BERTO_RULES, buildBertoOrders, buildLevels, centSuffix, closeBertoSession,
-  createBertoDailyPlan, declusterSuffixes, evaluateBertoPositionExit,
-  evaluateFirstTouch, fillBertoPending, getBertoMarketSession,
+  BERTO_RULES,
+  buildBertoOrders,
+  buildLevels,
+  calculateRiskSizedLots,
+  centSuffix,
+  closeBertoSession,
+  createBertoDailyPlan,
+  declusterSuffixes,
+  evaluateBertoPositionExit,
+  evaluateFirstTouch,
+  fillBertoPending,
 } from "../src/lib/bertoGoldenSetup";
-import { buildComparisonSnapshot, calculateMetrics } from "../src/lib/strategyComparisonLab";
+import {
+  buildComparisonSnapshot,
+  calculateMetrics,
+} from "../src/lib/strategyComparisonLab";
 
-const LEVEL = 7_518;
-const LONG_TOUCH = (at: string) => ({ low: LEVEL - 1, high: LEVEL + 1, previousClose: LEVEL - 2, at });
-const SHORT_TOUCH = (at: string) => ({ low: LEVEL - 1, high: LEVEL + 1, previousClose: LEVEL + 2, at });
+const calm = { high: 5_020, low: 4_980, close: 5_000, complete: true };
+const green = { open: 724, high: 737.62, low: 724.18, close: 735 };
+const red = { open: 724, high: 737.69, low: 723.61, close: 723 };
 
-test("latest BERTO configuration matches the confirmed rebuild", () => {
+test("v4.50 keeps the existing QQQ source and SHADOW-only configuration", () => {
   assert.equal(BERTO_RULES.signalSourceUrl, "https://www.investing.com/etfs/powershares-qqqq");
-  assert.equal(BERTO_RULES.marketTimezone, "America/New_York");
-  assert.equal(BERTO_RULES.regularOpen, "09:30");
+  assert.equal(BERTO_RULES.qqqDataSource, "INVESTING_COM");
+  assert.equal(BERTO_RULES.timezone, "America/New_York");
+  assert.equal(BERTO_RULES.sessionOpen, "09:30");
   assert.equal(BERTO_RULES.regularForcedExit, "15:55");
-  assert.equal(BERTO_RULES.earlyCloseForcedExit, "12:55");
-  assert.equal(BERTO_RULES.stopLossPointsFromEntry, 13);
-  assert.equal(BERTO_RULES.takeProfitPointsFromEntry, 22);
-  assert.equal(BERTO_RULES.maxLevelDistanceFromOpen, 50);
+  assert.equal(BERTO_RULES.halfDayForcedExit, "12:55");
+  assert.equal(BERTO_RULES.initialStopPoints, 13);
+  assert.equal(BERTO_RULES.maximumDistanceFromOpenPoints, 50);
   assert.equal(BERTO_RULES.mode, "SHADOW");
   assert.equal(BERTO_RULES.executionEnabled, false);
   assert.equal(BERTO_RULES.decisionInfluence, false);
 });
 
-test("QQQ previous-day candle determines direction and doji suspends", () => {
-  assert.equal(createBertoDailyPlan({ open: 724, high: 737.62, low: 724.18, close: 735 }, 7_529.55).direction, "LONG");
-  assert.equal(createBertoDailyPlan({ open: 724, high: 737.62, low: 723.18, close: 723.99 }, 7_529.55).direction, "SHORT");
-  const doji = createBertoDailyPlan({ open: 724, high: 737.62, low: 723.18, close: 724 }, 7_529.55);
+test("v4.50 derives LONG, SHORT and doji suspension from the previous QQQ candle", () => {
+  assert.equal(
+    createBertoDailyPlan(green, 7_529.55, { previousSession: calm }).direction,
+    "LONG",
+  );
+  assert.equal(
+    createBertoDailyPlan(red, 7_529.55, { previousSession: calm }).direction,
+    "SHORT",
+  );
+  const doji = createBertoDailyPlan({ ...green, close: green.open }, 7_529.55, {
+    previousSession: calm,
+  });
   assert.equal(doji.active, false);
   assert.equal(doji.suspensionReason, "QQQ_PREVIOUS_CANDLE_DOJI");
 });
 
-test("QQQ suffix extraction and de-clustering remain deterministic", () => {
+test("suffix extraction and direction-aware circular de-clustering match v4.50", () => {
   assert.equal(centSuffix(724.18), 18);
   assert.equal(centSuffix(737.62), 62);
-  assert.deepEqual(declusterSuffixes([61, 69]), [61]);
-  assert.deepEqual(declusterSuffixes([98, 3]), [3]);
-  assert.deepEqual(declusterSuffixes([18, 62]), [18, 62]);
+  assert.deepEqual(declusterSuffixes([61, 69], "LONG"), [61]);
+  assert.deepEqual(declusterSuffixes([61, 69], "SHORT"), [69]);
+  assert.deepEqual(declusterSuffixes([98, 3], "LONG"), [3]);
+  assert.deepEqual(declusterSuffixes([98, 3], "SHORT"), [98]);
 });
 
-test("levels farther than 50 points from US500 open are removed", () => {
-  const levels = buildLevels(7_529.55, [18, 62], 3);
-  assert(levels.length > 0);
-  assert(levels.every((level) => level.distanceFromOpen <= 50));
-  assert(levels.some((level) => level.price === 7_518));
-  assert(levels.some((level) => level.price === 7_562));
-  assert(!levels.some((level) => level.price === 7_462));
+test("level grid retains only levels within fifty points of the US500 open", () => {
+  const levels = buildLevels(7_529.55, [18, 62]);
+  assert.deepEqual(
+    levels.map((x) => x.price),
+    [7_518, 7_562],
+  );
+  assert(levels.every((x) => x.distanceFromOpen <= 50));
 });
 
-test("SL 13 and TP 22 are measured from breakout entry", () => {
-  assert.deepEqual(buildBertoOrders(LEVEL, "LONG"), { direction: "LONG", kind: "STOP", contracts: 1, entryStop: 7_526, stopLoss: 7_513, takeProfit: 7_548 });
-  assert.deepEqual(buildBertoOrders(LEVEL, "SHORT"), { direction: "SHORT", kind: "STOP", contracts: 1, entryStop: 7_510, stopLoss: 7_523, takeProfit: 7_488 });
-});
-
-test("US session stays anchored to New York across DST", () => {
-  const newYorkTime = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+test("previous-session range is fail-closed and 1.3 percent is blocked", () => {
+  const missing = createBertoDailyPlan(green, 7_529.55, {
+    previousSession: { ...calm, complete: false },
   });
+  assert.equal(missing.suspensionReason, "PREVIOUS_SESSION_RANGE_UNAVAILABLE");
+  const threshold = createBertoDailyPlan(green, 7_529.55, {
+    previousSession: { high: 5_065, low: 5_000, close: 5_000, complete: true },
+  });
+  assert.equal(threshold.previousSessionRangePct, 1.3);
+  assert.equal(threshold.suspensionReason, "PREVIOUS_SESSION_RANGE_TOO_HIGH");
+  assert.equal(
+    createBertoDailyPlan(green, 7_529.55, { previousSession: calm }).active,
+    true,
+  );
+});
+
+test("closed and half-day sessions are explicit, without a hardcoded holiday list", () => {
+  assert.equal(
+    createBertoDailyPlan(green, 7_529.55, {
+      previousSession: calm,
+      sessionKind: "CLOSED",
+    }).suspensionReason,
+    "MARKET_CLOSED",
+  );
+  assert.equal(
+    createBertoDailyPlan(green, 7_529.55, {
+      previousSession: calm,
+      sessionKind: "HALF_DAY",
+    }).sessionClose,
+    "12:55",
+  );
+});
+
+test("opening-minute touch is discarded; valid approach arms breakout at plus eight", () => {
+  const opening = evaluateFirstTouch(
+    { price: 7_518, state: "ARMED" },
+    {
+      low: 7_517,
+      high: 7_519,
+      previousClose: 7_516,
+      at: "2026-09-24T13:30:00Z",
+    },
+    "LONG",
+  );
+  assert.equal(opening.state, "DISCARDED_OPENING_MINUTE_TOUCH");
+  const pending = evaluateFirstTouch(
+    { price: 7_518, state: "ARMED" },
+    {
+      low: 7_517,
+      high: 7_519,
+      previousClose: 7_516,
+      at: "2026-09-24T13:31:00Z",
+    },
+    "LONG",
+  );
+  assert.equal(pending.state, "PENDING_BREAKOUT");
+  assert.deepEqual(pending.order, {
+    direction: "LONG",
+    kind: "STOP",
+    entryStop: 7_526,
+    stopLoss: 7_513,
+    takeProfit: null,
+    trailingDistancePoints: 25,
+    riskPercent: 2,
+  });
+});
+
+test("SHORT approach must come from above and a breakout cannot fill on the touch candle", () => {
+  const touch = { low: 7_517, high: 7_519, previousClose: 7_520, at: "2026-09-24T13:31:00Z" };
+  const pending = evaluateFirstTouch({ price: 7_518, state: "ARMED" }, touch, "SHORT");
+  assert.equal(pending.state, "PENDING_BREAKOUT");
+  assert.equal(pending.order?.entryStop, 7_510);
+  assert.equal(fillBertoPending(pending, { low: 7_510, high: 7_519, at: touch.at }), pending);
+  assert.equal(
+    evaluateFirstTouch({ price: 7_518, state: "ARMED" }, { ...touch, previousClose: 7_516 }, "SHORT").state,
+    "DISCARDED_WRONG_APPROACH",
+  );
+});
+
+test("session boundaries follow New York across winter and summer DST", () => {
   for (const { date, openUtc, exitUtc } of [
     { date: "2026-01-15", openUtc: "14:30", exitUtc: "20:55" },
     { date: "2026-07-15", openUtc: "13:30", exitUtc: "19:55" },
   ]) {
-    const open = `${date}T${openUtc}:00.000Z`;
-    const exit = `${date}T${exitUtc}:00.000Z`;
-    const session = getBertoMarketSession(open);
-    assert.equal(session.tradingDate, date);
-    assert.equal(session.isTradingDay, true);
-    assert.equal(session.isEarlyClose, false);
-    assert.equal(session.openMinute, 570);
-    assert.equal(session.forcedExitMinute, 955);
-    assert.equal(newYorkTime.format(new Date(open)), "09:30");
-    assert.equal(newYorkTime.format(new Date(exit)), "15:55");
+    const opening = evaluateFirstTouch(
+      { price: 7_518, state: "ARMED" },
+      { low: 7_517, high: 7_519, previousClose: 7_516, at: `${date}T${openUtc}:00Z` },
+      "LONG",
+    );
+    assert.equal(opening.state, "DISCARDED_OPENING_MINUTE_TOUCH");
+    assert.equal(closeBertoSession([{ price: 7_518, state: "ARMED" }], `${date}T${exitUtc}:00Z`, 7_520)[0]?.state, "EXPIRED");
   }
 });
 
-test("US holidays close BERTO and early-close sessions exit at 12:55 ET", () => {
-  for (const at of ["2026-07-03T15:00:00.000Z", "2026-12-25T15:00:00.000Z"]) {
-    const session = getBertoMarketSession(at);
-    assert.equal(session.isTradingDay, false);
-    assert.equal(session.isEarlyClose, false);
-  }
-  for (const at of ["2026-11-27T16:00:00.000Z", "2026-12-24T16:00:00.000Z"]) {
-    const session = getBertoMarketSession(at);
-    assert.equal(session.isTradingDay, true);
-    assert.equal(session.isEarlyClose, true);
-    assert.equal(session.forcedExitMinute, 775);
-  }
+test("breakout rejects excessive spread or chase and opens otherwise", () => {
+  const pending = evaluateFirstTouch(
+    { price: 7_518, state: "ARMED" },
+    {
+      low: 7_517,
+      high: 7_519,
+      previousClose: 7_516,
+      at: "2026-09-24T13:31:00Z",
+    },
+    "LONG",
+  );
+  assert.equal(
+    fillBertoPending(pending, {
+      low: 7_518,
+      high: 7_530,
+      executionPrice: 7_526,
+      spreadPoints: 2.1,
+      at: "2026-09-24T13:32:00Z",
+    }).state,
+    "DISCARDED_SPREAD",
+  );
+  assert.equal(
+    fillBertoPending(pending, {
+      low: 7_518,
+      high: 7_530,
+      executionPrice: 7_528.01,
+      spreadPoints: 1,
+      at: "2026-09-24T13:32:00Z",
+    }).state,
+    "DISCARDED_CHASE",
+  );
+  const open = fillBertoPending(pending, {
+    low: 7_518,
+    high: 7_526,
+    executionPrice: 7_526,
+    spreadPoints: 1,
+    at: "2026-09-24T13:32:00Z",
+  });
+  assert.equal(open.state, "POSITION_OPEN");
+  assert.equal(open.currentStop, 7_513);
 });
 
-test("opening candle touch is discarded and later correct LONG approach can arm", () => {
-  const atOpen = evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, LONG_TOUCH("2026-09-24T13:30:00.000Z"), "LONG");
-  assert.equal(atOpen.state, "DISCARDED_OPENING_CANDLE_TOUCH");
-  const later = evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, LONG_TOUCH("2026-09-24T13:31:00.000Z"), "LONG");
-  assert.equal(later.state, "PENDING_STOP");
-  assert.equal(later.order?.entryStop, 7_526);
+test("trailing uses closed M1 candles, activates beyond level plus twenty and has no fixed TP", () => {
+  const pending = evaluateFirstTouch(
+    { price: 7_518, state: "ARMED" },
+    {
+      low: 7_517,
+      high: 7_519,
+      previousClose: 7_516,
+      at: "2026-09-24T13:31:00Z",
+    },
+    "LONG",
+  );
+  const open = fillBertoPending(pending, {
+    low: 7_518,
+    high: 7_526,
+    at: "2026-09-24T13:32:00Z",
+  });
+  const inactive = evaluateBertoPositionExit(open, {
+    low: 7_520,
+    high: 7_538,
+    at: "2026-09-24T13:33:00Z",
+  });
+  assert.equal(inactive.currentStop, 7_513);
+  const trailed = evaluateBertoPositionExit(inactive, {
+    low: 7_530,
+    high: 7_543,
+    at: "2026-09-24T13:34:00Z",
+  });
+  assert.equal(trailed.currentStop, 7_518);
+  const stopped = evaluateBertoPositionExit(trailed, {
+    low: 7_518,
+    high: 7_540,
+    at: "2026-09-24T13:35:00Z",
+  });
+  assert.equal(stopped.state, "CLOSED_STOP_LOSS");
+  assert.equal(stopped.pnlPoints, -8);
 });
 
-test("SHORT approach must come from above", () => {
-  assert.equal(evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, SHORT_TOUCH("2026-09-24T13:31:00.000Z"), "SHORT").state, "PENDING_STOP");
-  assert.equal(evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, LONG_TOUCH("2026-09-24T13:31:00.000Z"), "SHORT").state, "DISCARDED_WRONG_APPROACH");
+test("risk sizing uses strategy balance, floors to lot step and rejects dangerous minimum lot", () => {
+  assert.equal(
+    calculateRiskSizedLots({
+      balance: 5_000,
+      riskPerLot: 50,
+      minimumLot: 0.01,
+      lotStep: 0.01,
+      brokerMaximumLot: 100,
+    }),
+    2,
+  );
+  assert.equal(
+    calculateRiskSizedLots({
+      balance: 1_000,
+      riskPerLot: 5_000,
+      minimumLot: 0.1,
+      lotStep: 0.1,
+      brokerMaximumLot: 100,
+    }),
+    0,
+  );
 });
 
-test("pending order cannot fill on touch candle but can fill later", () => {
-  const pending = evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, LONG_TOUCH("2026-09-24T13:31:00.000Z"), "LONG");
-  assert.equal(fillBertoPending(pending, { low: LEVEL, high: 7_526, at: "2026-09-24T13:31:00.000Z" }), pending);
-  assert.equal(fillBertoPending(pending, { low: LEVEL, high: 7_526, at: "2026-09-24T13:32:00.000Z" }).state, "POSITION_OPEN");
+test("regular and half-day close are final and prevent post-session fills", () => {
+  const pending = evaluateFirstTouch(
+    { price: 7_518, state: "ARMED" },
+    {
+      low: 7_517,
+      high: 7_519,
+      previousClose: 7_516,
+      at: "2026-09-24T13:31:00Z",
+    },
+    "LONG",
+  );
+  const open = fillBertoPending(pending, {
+    low: 7_518,
+    high: 7_526,
+    at: "2026-09-24T13:32:00Z",
+  });
+  assert.deepEqual(
+    closeBertoSession([pending], "2026-09-24T19:54:00Z", 7_520),
+    [pending],
+  );
+  const closed = closeBertoSession(
+    [pending, open],
+    "2026-09-24T19:55:00Z",
+    7_520,
+  );
+  assert.deepEqual(
+    closed.map((x) => x.state),
+    ["CANCELLED_SESSION_END", "CLOSED_FORCED"],
+  );
+  const half = closeBertoSession(
+    [open],
+    "2026-09-24T16:55:00Z",
+    7_520,
+    "HALF_DAY",
+  );
+  assert.equal(half[0]?.state, "CLOSED_FORCED");
+  assert.equal(
+    fillBertoPending(closed[0]!, {
+      low: 7_500,
+      high: 7_540,
+      at: "2026-09-24T19:56:00Z",
+    }),
+    closed[0],
+  );
 });
 
-test("new SL/TP exits work and ambiguous candle is conservatively SL", () => {
-  const pending = evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, LONG_TOUCH("2026-09-24T13:31:00.000Z"), "LONG");
-  const opened = fillBertoPending(pending, { low: LEVEL, high: 7_526, at: "2026-09-24T13:32:00.000Z" });
-  const tp = evaluateBertoPositionExit(opened, { low: 7_520, high: 7_548, at: "2026-09-24T13:33:00.000Z" });
-  assert.equal(tp.state, "CLOSED_TAKE_PROFIT");
-  assert.equal(tp.pnlPoints, 22);
-  const ambiguous = evaluateBertoPositionExit(opened, { low: 7_513, high: 7_548, at: "2026-09-24T13:33:00.000Z" });
-  assert.equal(ambiguous.state, "CLOSED_STOP_LOSS");
-  assert.equal(ambiguous.pnlPoints, -13);
-});
-
-test("15:55 ET expires armed, cancels pending and force-closes open positions", () => {
-  const pending = evaluateFirstTouch({ price: LEVEL, state: "ARMED" }, LONG_TOUCH("2026-09-24T13:31:00.000Z"), "LONG");
-  const opened = fillBertoPending(pending, { low: LEVEL, high: 7_526, at: "2026-09-24T13:32:00.000Z" });
-  const closed = closeBertoSession([{ price: LEVEL - 20, state: "ARMED" }, pending, opened], "2026-09-24T19:55:00.000Z", 7_530);
-  assert.equal(closed[0].state, "EXPIRED");
-  assert.equal(closed[1].state, "CANCELLED_SESSION_END");
-  assert.equal(closed[2].state, "CLOSED_FORCED");
-});
-
-test("comparison remains isolated and shadow-only", () => {
-  const snapshot = buildComparisonSnapshot(5_000, []);
-  assert.equal(snapshot.mode, "SHADOW");
-  assert.equal(snapshot.executionEnabled, false);
+test("comparison lab keeps equal capital, isolated metrics and SHADOW-only Berto", () => {
+  const trades = [
+    {
+      strategy: "FIVE_BRAINS_STRATEGY" as const,
+      openedAt: "2026-01-02T15:00:00Z",
+      closedAt: "2026-01-02T16:00:00Z",
+      initialCapital: 5_000,
+      netPnl: 100,
+      riskAmount: 50,
+      fees: 2,
+      slippage: 1,
+    },
+    {
+      strategy: "BERTO_GOLDEN_SETUP" as const,
+      openedAt: "2026-01-03T15:00:00Z",
+      closedAt: "2026-01-03T16:00:00Z",
+      initialCapital: 5_000,
+      netPnl: -50,
+      riskAmount: 50,
+      fees: 2,
+      slippage: 1,
+    },
+  ];
+  const snapshot = buildComparisonSnapshot(5_000, trades);
+  assert.equal(snapshot.strategies.FIVE_BRAINS_STRATEGY.finalCapital, 5_100);
+  assert.equal(snapshot.strategies.BERTO_GOLDEN_SETUP.finalCapital, 4_950);
   assert.equal(snapshot.isolatedPortfolios, true);
   assert.equal(snapshot.decisionCrossInfluence, false);
-  assert.equal(snapshot.bertoRules.version, BERTO_RULES.version);
+  assert.equal(BERTO_RULES.executionEnabled, false);
+  assert.equal(BERTO_RULES.version, "4.50.0");
+  const metrics = calculateMetrics(
+    5_000,
+    trades.filter((x) => x.strategy === "BERTO_GOLDEN_SETUP"),
+  );
+  assert.equal(metrics.closedTrades, 1);
 });
 
 test("comparison metrics remain independent from BERTO rules", () => {

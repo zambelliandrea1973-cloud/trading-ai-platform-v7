@@ -1,0 +1,2303 @@
+From 4faf0876171923a4bbe7d0dcc7f23ff0d6b1ba6e Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 29 Sep 2026 15:42:17 +0900
+Subject: [PATCH] Replace Berto strategy with Breakout QQQ v4.50
+
+---
+ .../api-server/src/lib/bertoGoldenSetup.ts    | 572 ++++++++++------
+ .../src/routes/strategy-comparison.ts         |  63 +-
+ .../test/strategy-comparison-lab.test.ts      | 574 +++++++---------
+ .../src/pages/strategy-comparison.tsx         | 617 +++++++++++++-----
+ docs/STRATEGY-COMPARISON-LAB.md               |  45 +-
+ 5 files changed, 1116 insertions(+), 755 deletions(-)
+
+diff --git a/artifacts/api-server/src/lib/bertoGoldenSetup.ts b/artifacts/api-server/src/lib/bertoGoldenSetup.ts
+index c755efe..99c1258 100644
+--- a/artifacts/api-server/src/lib/bertoGoldenSetup.ts
++++ b/artifacts/api-server/src/lib/bertoGoldenSetup.ts
+@@ -1,46 +1,66 @@
+ export const BERTO_RULES = {
+-  id: "BERTO_QQQ_BREAKOUT_RETEST",
+-  version: "3.0.0",
++  id: "BERTO_BREAKOUT_QQQ_V450",
++  version: "4.50.0",
+   signalSymbol: "QQQ",
+   executionSymbol: "US500",
+-  timezone: "Europe/Rome",
+-  preparationStart: "09:30",
+-  entryWindowStart: "15:30",
+-  forcedExit: "21:55",
++  timezone: "America/New_York",
++  sessionOpen: "09:30",
++  regularForcedExit: "15:55",
++  halfDayForcedExit: "12:55",
+   timeframe: "1m",
+-  contracts: 1,
+   breakoutPoints: 8,
+-  stopOffsetPoints: 5,
+-  takeProfitOffsetPoints: 30,
++  initialStopPoints: 13,
++  trailingDistancePoints: 25,
++  trailingActivationFromLevelPoints: 20,
++  trailingMinimumStepPoints: 0.2,
+   suffixClusterDistance: 10,
++  maximumDistanceFromOpenPoints: 50,
++  maximumPreviousRangePct: 1.3,
++  maximumChasePoints: 2,
++  maximumSpreadPoints: 2,
++  riskPerTradePct: 2,
++  prudentStartingRiskPct: 1,
++  maximumLots: 50,
++  reconnectDelaySeconds: 90,
++  qqqDataSource: "YAHOO_FINANCE",
+   overnightAllowed: false,
+   executionEnabled: false,
+   mode: "SHADOW",
+   decisionInfluence: false,
+-  assumedSpreadPointsPerContract: 0.5,
+-  normalizedComparisonRiskPct: 0.5,
+ } as const;
+ 
+ export type BertoDirection = "LONG" | "SHORT" | "NONE";
++export type BertoSessionKind = "REGULAR" | "HALF_DAY" | "CLOSED";
+ export type BertoSuspensionReason =
++  | "MARKET_CLOSED"
+   | "QQQ_PREVIOUS_CANDLE_DOJI"
+   | "INVALID_DAILY_PRICES"
++  | "PREVIOUS_SESSION_RANGE_UNAVAILABLE"
++  | "PREVIOUS_SESSION_RANGE_TOO_HIGH"
+   | "NO_VALID_LEVELS";
+-
+ export interface QqqDailyCandle {
+   open: number;
+   high: number;
+   low: number;
+   close: number;
+ }
+-
++export interface PreviousUsSession {
++  high: number;
++  low: number;
++  close: number;
++  complete: boolean;
++}
+ export interface BertoLevel {
+   price: number;
+   suffix: number;
+   distanceFromOpen: number;
+   state: "ARMED";
+ }
+-
++export interface BertoPlanOptions {
++  previousSession: PreviousUsSession;
++  sessionKind?: BertoSessionKind;
++  depth?: number;
++}
+ export interface BertoDailyPlan {
+   strategyId: typeof BERTO_RULES.id;
+   version: typeof BERTO_RULES.version;
+@@ -49,246 +69,374 @@ export interface BertoDailyPlan {
+   decisionInfluence: false;
+   active: boolean;
+   suspensionReason?: BertoSuspensionReason;
+-  qqqCandleGreen: boolean;
+   direction: BertoDirection;
+   rawSuffixes: number[];
+   validSuffixes: number[];
+   sessionOpen: number;
++  sessionKind: BertoSessionKind;
++  sessionClose: string;
++  previousSessionRangePct?: number;
+   levels: BertoLevel[];
+   rules: typeof BERTO_RULES;
+ }
+-
+ export type BertoLevelStatus =
+   | "ARMED"
+-  | "DISCARDED_1530_TOUCH"
++  | "DISCARDED_OPENING_MINUTE_TOUCH"
+   | "DISCARDED_WRONG_APPROACH"
+-  | "PENDING_STOP"
++  | "PENDING_BREAKOUT"
++  | "DISCARDED_CHASE"
++  | "DISCARDED_SPREAD"
+   | "POSITION_OPEN"
+   | "CLOSED_STOP_LOSS"
+-  | "CLOSED_TAKE_PROFIT"
+   | "CLOSED_FORCED"
+-  | "CANCELLED_2155"
++  | "CANCELLED_SESSION_END"
+   | "EXPIRED";
+-
+ export interface BertoLevelState {
+   price: number;
+   state: BertoLevelStatus;
+   firstTouchedAt?: string;
+   order?: BertoOrders;
+   positionOpenedAt?: string;
++  currentStop?: number;
++  favorableExtreme?: number;
+   closedAt?: string;
+   exitPrice?: number;
+   pnlPoints?: number;
+ }
+-
+ export interface BertoOrders {
+   direction: Exclude<BertoDirection, "NONE">;
+   kind: "STOP";
+-  contracts: 1;
+   entryStop: number;
+   stopLoss: number;
+-  takeProfit: number;
++  takeProfit: null;
++  trailingDistancePoints: number;
++  riskPercent: number;
+ }
+ 
+ export function createBertoDailyPlan(
+   qqq: QqqDailyCandle,
+   sp500SessionOpen: number,
+-  depth = 3,
++  options: BertoPlanOptions,
+ ): BertoDailyPlan {
+-  assertFinitePositive(sp500SessionOpen, "S&P 500 session open");
+-  const validPrices = [qqq.open, qqq.high, qqq.low, qqq.close]
+-    .every((value) => Number.isFinite(value) && value > 0);
+-  const direction: BertoDirection = !validPrices
++  assertPositive(sp500SessionOpen, "S&P 500 session open");
++  const sessionKind = options.sessionKind ?? "REGULAR";
++  const sessionClose =
++    sessionKind === "HALF_DAY"
++      ? BERTO_RULES.halfDayForcedExit
++      : BERTO_RULES.regularForcedExit;
++  if (sessionKind === "CLOSED")
++    return suspended(
++      sp500SessionOpen,
++      sessionKind,
++      sessionClose,
++      "MARKET_CLOSED",
++    );
++  const valid = [qqq.open, qqq.high, qqq.low, qqq.close].every(positive);
++  const direction: BertoDirection = !valid
+     ? "NONE"
+     : qqq.close > qqq.open
+       ? "LONG"
+       : qqq.close < qqq.open
+         ? "SHORT"
+         : "NONE";
+-  const rawSuffixes = validPrices ? [centSuffix(qqq.low), centSuffix(qqq.high)] : [];
+-
+-  if (!validPrices || direction === "NONE") {
++  const rawSuffixes = valid ? [centSuffix(qqq.low), centSuffix(qqq.high)] : [];
++  if (!valid || direction === "NONE")
+     return {
+-      ...basePlan(sp500SessionOpen),
++      ...base(sp500SessionOpen, sessionKind, sessionClose),
+       active: false,
+-      suspensionReason: validPrices ? "QQQ_PREVIOUS_CANDLE_DOJI" : "INVALID_DAILY_PRICES",
+-      qqqCandleGreen: direction === "LONG",
++      suspensionReason: valid
++        ? "QQQ_PREVIOUS_CANDLE_DOJI"
++        : "INVALID_DAILY_PRICES",
+       direction,
+       rawSuffixes,
+       validSuffixes: [],
+       levels: [],
+     };
+-  }
+-
+-  const validSuffixes = declusterSuffixes(rawSuffixes);
+-  const levels = buildLevels(sp500SessionOpen, validSuffixes, depth);
++  const range = previousRangePct(options.previousSession);
++  if (range === undefined)
++    return {
++      ...base(sp500SessionOpen, sessionKind, sessionClose),
++      active: false,
++      suspensionReason: "PREVIOUS_SESSION_RANGE_UNAVAILABLE",
++      direction,
++      rawSuffixes,
++      validSuffixes: [],
++      levels: [],
++    };
++  if (range >= BERTO_RULES.maximumPreviousRangePct)
++    return {
++      ...base(sp500SessionOpen, sessionKind, sessionClose),
++      active: false,
++      suspensionReason: "PREVIOUS_SESSION_RANGE_TOO_HIGH",
++      direction,
++      rawSuffixes,
++      validSuffixes: [],
++      previousSessionRangePct: range,
++      levels: [],
++    };
++  const validSuffixes = declusterSuffixes(rawSuffixes, direction);
++  const levels = buildLevels(
++    sp500SessionOpen,
++    validSuffixes,
++    options.depth ?? 10,
++  );
+   return {
+-    ...basePlan(sp500SessionOpen),
++    ...base(sp500SessionOpen, sessionKind, sessionClose),
+     active: levels.length > 0,
+     suspensionReason: levels.length ? undefined : "NO_VALID_LEVELS",
+-    qqqCandleGreen: direction === "LONG",
+     direction,
+     rawSuffixes,
+     validSuffixes,
++    previousSessionRangePct: range,
+     levels,
+   };
+ }
+ 
+ export function centSuffix(price: number): number {
+-  assertFinitePositive(price, "QQQ price");
+-  const cents = Math.round((price + Number.EPSILON) * 100);
+-  return ((cents % 100) + 100) % 100;
++  assertPositive(price, "QQQ price");
++  return ((Math.round((price + Number.EPSILON) * 100) % 100) + 100) % 100;
+ }
+-
+-export function circularSuffixDistance(left: number, right: number): number {
+-  const difference = Math.abs(left - right);
+-  return Math.min(difference, 100 - difference);
++export function circularSuffixDistance(a: number, b: number): number {
++  const d = Math.abs(a - b);
++  return Math.min(d, 100 - d);
+ }
+-
+-export function declusterSuffixes(suffixes: number[]): number[] {
+-  const unique = [...new Set(suffixes.map(normalizeSuffix))].sort((a, b) => a - b);
+-  if (unique.length <= 1) return unique;
+-  if (unique.length !== 2) throw new Error("Berto setup requires exactly the Low and High suffixes.");
+-  return circularSuffixDistance(unique[0], unique[1]) < BERTO_RULES.suffixClusterDistance
+-    ? [unique[0]]
+-    : unique;
++export function declusterSuffixes(
++  values: number[],
++  direction: Exclude<BertoDirection, "NONE">,
++): number[] {
++  const suffixes = [...new Set(values.map(normalizeSuffix))].sort(
++    (a, b) => a - b,
++  );
++  if (suffixes.length <= 1) return suffixes;
++  if (suffixes.length !== 2)
++    throw new Error("Berto setup requires exactly the Low and High suffixes.");
++  return circularSuffixDistance(suffixes[0]!, suffixes[1]!) <
++    BERTO_RULES.suffixClusterDistance
++    ? [direction === "LONG" ? suffixes[0]! : suffixes[1]!]
++    : suffixes;
+ }
+-
+-export function buildLevels(sessionOpen: number, suffixes: number[], depth = 3): BertoLevel[] {
+-  assertFinitePositive(sessionOpen, "S&P 500 session open");
+-  if (!Number.isInteger(depth) || depth < 1 || depth > 50) {
++export function buildLevels(
++  open: number,
++  suffixes: number[],
++  depth = 10,
++): BertoLevel[] {
++  assertPositive(open, "S&P 500 session open");
++  if (!Number.isInteger(depth) || depth < 1 || depth > 50)
+     throw new Error("Level depth must be an integer between 1 and 50.");
+-  }
+-  const levels = new Map<number, BertoLevel>();
+-  const century = Math.floor(sessionOpen / 100) * 100;
+-  for (const rawSuffix of suffixes) {
+-    const suffix = normalizeSuffix(rawSuffix);
+-    for (let offset = -depth; offset <= depth; offset += 1) {
+-      const level = century + offset * 100 + suffix;
+-      if (level <= 0) continue;
+-      levels.set(level, {
+-        price: level,
+-        suffix,
+-        distanceFromOpen: round(Math.abs(sessionOpen - level)),
+-        state: "ARMED",
+-      });
++  const found = new Map<number, BertoLevel>();
++  const century = Math.floor(open / 100) * 100;
++  for (const raw of suffixes)
++    for (let offset = -depth; offset <= depth; offset++) {
++      const suffix = normalizeSuffix(raw);
++      const price = century + 100 * offset + suffix;
++      const distanceFromOpen = round(Math.abs(open - price));
++      if (
++        price > 0 &&
++        distanceFromOpen <= BERTO_RULES.maximumDistanceFromOpenPoints
++      )
++        found.set(price, { price, suffix, distanceFromOpen, state: "ARMED" });
+     }
+-  }
+-  return [...levels.values()].sort((a, b) => a.price - b.price);
++  return [...found.values()].sort((a, b) => a.price - b.price);
+ }
+-
+-export function buildBertoOrders(level: number, direction: Exclude<BertoDirection, "NONE">): BertoOrders {
+-  assertFinitePositive(level, "Berto level");
+-  if (direction === "LONG") {
+-    return {
+-      direction,
+-      kind: "STOP",
+-      contracts: 1,
+-      entryStop: level + BERTO_RULES.breakoutPoints,
+-      stopLoss: level - BERTO_RULES.stopOffsetPoints,
+-      takeProfit: level + BERTO_RULES.takeProfitOffsetPoints,
+-    };
+-  }
++export function buildBertoOrders(
++  level: number,
++  direction: Exclude<BertoDirection, "NONE">,
++): BertoOrders {
++  assertPositive(level, "Berto level");
++  const sign = direction === "LONG" ? 1 : -1;
++  const entryStop = level + sign * BERTO_RULES.breakoutPoints;
+   return {
+     direction,
+     kind: "STOP",
+-    contracts: 1,
+-    entryStop: level - BERTO_RULES.breakoutPoints,
+-    stopLoss: level + BERTO_RULES.stopOffsetPoints,
+-    takeProfit: level - BERTO_RULES.takeProfitOffsetPoints,
++    entryStop,
++    stopLoss: entryStop - sign * BERTO_RULES.initialStopPoints,
++    takeProfit: null,
++    trailingDistancePoints: BERTO_RULES.trailingDistancePoints,
++    riskPercent: BERTO_RULES.riskPerTradePct,
+   };
+ }
+-
+ export function evaluateFirstTouch(
+   current: BertoLevelState,
+   candle: { low: number; high: number; previousClose: number; at: string },
+   direction: Exclude<BertoDirection, "NONE">,
++  kind: Exclude<BertoSessionKind, "CLOSED"> = "REGULAR",
+ ): BertoLevelState {
+   if (current.state !== "ARMED") return current;
+-  const minute = romeMinuteOfDay(candle.at);
+-  const entryStart = 15 * 60 + 30;
+-  const exit = 21 * 60 + 55;
+-  if (minute >= exit) return { ...current, state: "EXPIRED" };
+-  if (minute < entryStart || candle.low > current.price || candle.high < current.price) return current;
+-  if (minute === entryStart) return { ...current, state: "DISCARDED_1530_TOUCH", firstTouchedAt: candle.at };
+-  const correctApproach = direction === "LONG"
+-    ? candle.previousClose < current.price
+-    : candle.previousClose > current.price;
+-  if (!correctApproach) return { ...current, state: "DISCARDED_WRONG_APPROACH", firstTouchedAt: candle.at };
+-  return { ...current, state: "PENDING_STOP", firstTouchedAt: candle.at, order: buildBertoOrders(current.price, direction) };
+-}
+-
+-/** A quote alone has no previous candle close, so it cannot authorize a pending order. */
+-export function evaluateLevelTouch(
+-  current: BertoLevelState,
+-  quote: { ask: number; at: string },
+-): BertoLevelState {
+-  if (current.state !== "ARMED") return current;
+-  assertFinitePositive(quote.ask, "Ask");
+-  const minute = romeMinuteOfDay(quote.at);
+-  const entryStart = 15 * 60 + 30;
+-  const exit = 21 * 60 + 55;
+-  if (minute >= exit) return { ...current, state: "EXPIRED" };
+-  if (minute < entryStart || quote.ask !== current.price) return current;
+-  if (minute === entryStart) return { ...current, state: "DISCARDED_1530_TOUCH", firstTouchedAt: quote.at };
+-  return current;
++  const minute = nyMinute(candle.at);
++  const open = 570;
++  if (minute >= endMinute(kind)) return { ...current, state: "EXPIRED" };
++  if (
++    minute < open ||
++    candle.low > current.price ||
++    candle.high < current.price
++  )
++    return current;
++  if (minute === open)
++    return {
++      ...current,
++      state: "DISCARDED_OPENING_MINUTE_TOUCH",
++      firstTouchedAt: candle.at,
++    };
++  const correct =
++    direction === "LONG"
++      ? candle.previousClose < current.price
++      : candle.previousClose > current.price;
++  if (!correct)
++    return {
++      ...current,
++      state: "DISCARDED_WRONG_APPROACH",
++      firstTouchedAt: candle.at,
++    };
++  return {
++    ...current,
++    state: "PENDING_BREAKOUT",
++    firstTouchedAt: candle.at,
++    order: buildBertoOrders(current.price, direction),
++  };
+ }
+-
+ export function fillBertoPending(
+   current: BertoLevelState,
+-  candle: { low: number; high: number; at: string },
++  candle: {
++    low: number;
++    high: number;
++    at: string;
++    executionPrice?: number;
++    spreadPoints?: number;
++  },
++  kind: Exclude<BertoSessionKind, "CLOSED"> = "REGULAR",
+ ): BertoLevelState {
+-  if (current.state !== "PENDING_STOP" || !current.order || !current.firstTouchedAt) return current;
+-  if (!isWithinBertoSession(candle.at, current.firstTouchedAt)) return current;
+-  // One-minute OHLC cannot establish whether a breakout preceded the first touch in the same candle.
+-  if (Date.parse(candle.at) <= Date.parse(current.firstTouchedAt)) return current;
+-  const crossed = current.order.direction === "LONG"
+-    ? candle.high >= current.order.entryStop
+-    : candle.low <= current.order.entryStop;
+-  return crossed ? { ...current, state: "POSITION_OPEN", positionOpenedAt: candle.at } : current;
++  if (
++    current.state !== "PENDING_BREAKOUT" ||
++    !current.order ||
++    !current.firstTouchedAt ||
++    !inSession(candle.at, current.firstTouchedAt, kind)
++  )
++    return current;
++  if (Date.parse(candle.at) <= Date.parse(current.firstTouchedAt))
++    return current;
++  const crossed =
++    current.order.direction === "LONG"
++      ? candle.high >= current.order.entryStop
++      : candle.low <= current.order.entryStop;
++  if (!crossed) return current;
++  if ((candle.spreadPoints ?? 0) > BERTO_RULES.maximumSpreadPoints)
++    return { ...current, state: "DISCARDED_SPREAD" };
++  const price = candle.executionPrice ?? current.order.entryStop;
++  const chase =
++    current.order.direction === "LONG"
++      ? price - current.order.entryStop
++      : current.order.entryStop - price;
++  if (chase > BERTO_RULES.maximumChasePoints)
++    return { ...current, state: "DISCARDED_CHASE" };
++  return {
++    ...current,
++    state: "POSITION_OPEN",
++    positionOpenedAt: candle.at,
++    currentStop: current.order.stopLoss,
++    favorableExtreme: price,
++  };
+ }
+-
+ export function evaluateBertoPositionExit(
+   current: BertoLevelState,
+   candle: { low: number; high: number; at: string },
++  kind: Exclude<BertoSessionKind, "CLOSED"> = "REGULAR",
+ ): BertoLevelState {
+-  if (current.state !== "POSITION_OPEN" || !current.order || !current.positionOpenedAt) return current;
+-  if (!isWithinBertoSession(candle.at, current.positionOpenedAt)) return current;
+-  // Do not infer the intraminute path from the entry candle's OHLC.
+-  if (Date.parse(candle.at) <= Date.parse(current.positionOpenedAt)) return current;
+-  const { direction, stopLoss, takeProfit } = current.order;
+-  const stopped = direction === "LONG" ? candle.low <= stopLoss : candle.high >= stopLoss;
+-  const won = direction === "LONG" ? candle.high >= takeProfit : candle.low <= takeProfit;
+-  if (!stopped && !won) return current;
+-  // A candle touching both barriers is conservatively counted as a stop loss.
+-  return closePosition(current, candle.at, stopped ? stopLoss : takeProfit, stopped ? "CLOSED_STOP_LOSS" : "CLOSED_TAKE_PROFIT");
++  if (
++    current.state !== "POSITION_OPEN" ||
++    !current.order ||
++    !current.positionOpenedAt ||
++    current.currentStop === undefined ||
++    !inSession(candle.at, current.positionOpenedAt, kind) ||
++    Date.parse(candle.at) <= Date.parse(current.positionOpenedAt)
++  )
++    return current;
++  const long = current.order.direction === "LONG";
++  const stopped = long
++    ? candle.low <= current.currentStop
++    : candle.high >= current.currentStop;
++  if (stopped)
++    return closePosition(
++      current,
++      candle.at,
++      current.currentStop,
++      "CLOSED_STOP_LOSS",
++    );
++  const extreme = long
++    ? Math.max(current.favorableExtreme ?? current.order.entryStop, candle.high)
++    : Math.min(current.favorableExtreme ?? current.order.entryStop, candle.low);
++  const activation =
++    current.price +
++    (long ? 1 : -1) * BERTO_RULES.trailingActivationFromLevelPoints;
++  const activated = long ? extreme > activation : extreme < activation;
++  let currentStop = current.currentStop;
++  if (activated) {
++    const candidate =
++      extreme + (long ? -1 : 1) * BERTO_RULES.trailingDistancePoints;
++    if (
++      long
++        ? candidate >= currentStop + BERTO_RULES.trailingMinimumStepPoints
++        : candidate <= currentStop - BERTO_RULES.trailingMinimumStepPoints
++    )
++      currentStop = round(candidate);
++  }
++  return { ...current, favorableExtreme: extreme, currentStop };
+ }
+-
+-/** Shadow-only end-of-session transition; the caller supplies the observed market price for open positions. */
+-export function closeBertoSession(levels: BertoLevelState[], at: string, marketPrice: number): BertoLevelState[] {
+-  assertFinitePositive(marketPrice, "Market close price");
+-  if (romeMinuteOfDay(at) < 21 * 60 + 55) return levels;
++export function closeBertoSession(
++  levels: BertoLevelState[],
++  at: string,
++  marketPrice: number,
++  kind: Exclude<BertoSessionKind, "CLOSED"> = "REGULAR",
++): BertoLevelState[] {
++  assertPositive(marketPrice, "Market close price");
++  if (nyMinute(at) < endMinute(kind)) return levels;
+   return levels.map((level) => {
+     if (level.state === "ARMED") return { ...level, state: "EXPIRED" };
+-    if (!level.firstTouchedAt || !sameRomeDate(at, level.firstTouchedAt)) return level;
+-    if (level.state === "PENDING_STOP") return { ...level, state: "CANCELLED_2155", closedAt: at };
+-    if (level.state === "POSITION_OPEN") return closePosition(level, at, marketPrice, "CLOSED_FORCED");
+-    return level;
++    if (!level.firstTouchedAt || !sameNyDate(at, level.firstTouchedAt))
++      return level;
++    if (level.state === "PENDING_BREAKOUT")
++      return { ...level, state: "CANCELLED_SESSION_END", closedAt: at };
++    return level.state === "POSITION_OPEN"
++      ? closePosition(level, at, marketPrice, "CLOSED_FORCED")
++      : level;
+   });
+ }
+-
+-function closePosition(
+-  current: BertoLevelState,
+-  at: string,
+-  exitPrice: number,
+-  state: "CLOSED_STOP_LOSS" | "CLOSED_TAKE_PROFIT" | "CLOSED_FORCED",
+-): BertoLevelState {
+-  if (!current.order) return current;
+-  const sign = current.order.direction === "LONG" ? 1 : -1;
+-  return { ...current, state, closedAt: at, exitPrice, pnlPoints: round((exitPrice - current.order.entryStop) * sign) };
++export function calculateRiskSizedLots(input: {
++  balance: number;
++  riskPercent?: number;
++  riskPerLot: number;
++  minimumLot: number;
++  lotStep: number;
++  brokerMaximumLot: number;
++}): number {
++  const pct = input.riskPercent ?? BERTO_RULES.riskPerTradePct;
++  Object.entries(input)
++    .filter(([, v]) => v !== undefined)
++    .forEach(([k, v]) => assertPositive(v as number, k));
++  assertPositive(pct, "riskPercent");
++  const budget = (input.balance * pct) / 100;
++  let lots =
++    Math.floor(budget / input.riskPerLot / input.lotStep + 1e-9) *
++    input.lotStep;
++  if (lots < input.minimumLot) {
++    if (input.minimumLot * input.riskPerLot > 2 * budget) return 0;
++    lots = input.minimumLot;
++  }
++  lots = Math.min(lots, input.brokerMaximumLot, BERTO_RULES.maximumLots);
++  return round(Math.floor(lots / input.lotStep + 1e-9) * input.lotStep);
+ }
+ 
+-function basePlan(sessionOpen: number) {
++function previousRangePct(s: PreviousUsSession): number | undefined {
++  return !s.complete ||
++    ![s.high, s.low, s.close].every(positive) ||
++    s.high < s.low
++    ? undefined
++    : round(((s.high - s.low) / s.close) * 100);
++}
++function base(
++  sessionOpen: number,
++  sessionKind: BertoSessionKind,
++  sessionClose: string,
++) {
+   return {
+     strategyId: BERTO_RULES.id,
+     version: BERTO_RULES.version,
+@@ -296,53 +444,91 @@ function basePlan(sessionOpen: number) {
+     executionEnabled: false as const,
+     decisionInfluence: false as const,
+     sessionOpen,
++    sessionKind,
++    sessionClose,
+     rules: BERTO_RULES,
+   };
+ }
+-
+-function normalizeSuffix(value: number): number {
+-  if (!Number.isInteger(value) || value < 0 || value > 99) throw new Error("Suffix must be an integer between 0 and 99.");
+-  return value;
++function suspended(
++  open: number,
++  kind: BertoSessionKind,
++  close: string,
++  reason: BertoSuspensionReason,
++): BertoDailyPlan {
++  return {
++    ...base(open, kind, close),
++    active: false,
++    suspensionReason: reason,
++    direction: "NONE",
++    rawSuffixes: [],
++    validSuffixes: [],
++    levels: [],
++  };
+ }
+-
+-function assertFinitePositive(value: number, label: string): void {
+-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number.`);
++function closePosition(
++  current: BertoLevelState,
++  at: string,
++  exitPrice: number,
++  state: "CLOSED_STOP_LOSS" | "CLOSED_FORCED",
++): BertoLevelState {
++  const sign = current.order?.direction === "LONG" ? 1 : -1;
++  return current.order
++    ? {
++        ...current,
++        state,
++        closedAt: at,
++        exitPrice,
++        pnlPoints: round((exitPrice - current.order.entryStop) * sign),
++      }
++    : current;
+ }
+-
+-function isWithinBertoSession(at: string, startedAt?: string): boolean {
+-  const minute = romeMinuteOfDay(at);
+-  if (minute < 15 * 60 + 30 || minute >= 21 * 60 + 55) return false;
+-  // Legacy states without a touch or breakout timestamp cannot prove which session they belong to.
+-  // Keep their recorded state, but do not create a new fill without a session anchor.
+-  if (!startedAt) return false;
+-  return sameRomeDate(at, startedAt);
++function normalizeSuffix(n: number): number {
++  if (!Number.isInteger(n) || n < 0 || n > 99)
++    throw new Error("Suffix must be an integer between 0 and 99.");
++  return n;
+ }
+-
+-function sameRomeDate(at: string, startedAt: string): boolean {
+-  const romeDate = new Intl.DateTimeFormat("en-CA", {
++function positive(n: number): boolean {
++  return Number.isFinite(n) && n > 0;
++}
++function assertPositive(n: number, label: string): void {
++  if (!positive(n))
++    throw new Error(`${label} must be a positive finite number.`);
++}
++function endMinute(kind: Exclude<BertoSessionKind, "CLOSED">): number {
++  return kind === "HALF_DAY" ? 775 : 955;
++}
++function inSession(
++  at: string,
++  started: string,
++  kind: Exclude<BertoSessionKind, "CLOSED">,
++): boolean {
++  const m = nyMinute(at);
++  return m >= 570 && m < endMinute(kind) && sameNyDate(at, started);
++}
++function sameNyDate(a: string, b: string): boolean {
++  const f = new Intl.DateTimeFormat("en-CA", {
+     timeZone: BERTO_RULES.timezone,
+     year: "numeric",
+     month: "2-digit",
+     day: "2-digit",
+   });
+-  return romeDate.format(new Date(at)) === romeDate.format(new Date(startedAt));
++  return f.format(new Date(a)) === f.format(new Date(b));
+ }
+-
+-function romeMinuteOfDay(isoTimestamp: string): number {
+-  const date = new Date(isoTimestamp);
+-  if (Number.isNaN(date.getTime())) throw new Error("Timestamp must be valid ISO-8601.");
+-  const parts = new Intl.DateTimeFormat("en-US", {
++function nyMinute(timestamp: string): number {
++  const date = new Date(timestamp);
++  if (Number.isNaN(date.getTime()))
++    throw new Error("Timestamp must be valid ISO-8601.");
++  const p = new Intl.DateTimeFormat("en-US", {
+     timeZone: BERTO_RULES.timezone,
+     hour: "2-digit",
+     minute: "2-digit",
+     hourCycle: "h23",
+   }).formatToParts(date);
+-  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+-  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) throw new Error("Unable to resolve Rome session time.");
+-  return hour * 60 + minute;
++  return (
++    Number(p.find((x) => x.type === "hour")?.value) * 60 +
++    Number(p.find((x) => x.type === "minute")?.value)
++  );
+ }
+-
+-function round(value: number): number {
+-  return Number(value.toFixed(6));
++function round(n: number): number {
++  return Number(n.toFixed(6));
+ }
+diff --git a/artifacts/api-server/src/routes/strategy-comparison.ts b/artifacts/api-server/src/routes/strategy-comparison.ts
+index c8b013f..bd1c670 100644
+--- a/artifacts/api-server/src/routes/strategy-comparison.ts
++++ b/artifacts/api-server/src/routes/strategy-comparison.ts
+@@ -2,6 +2,8 @@ import { getAuth } from "@clerk/express";
+ import { Router, type IRouter, type Request } from "express";
+ import {
+   createBertoDailyPlan,
++  type BertoSessionKind,
++  type PreviousUsSession,
+   type QqqDailyCandle,
+ } from "../lib/bertoGoldenSetup";
+ import { buildComparisonSnapshot } from "../lib/strategyComparisonLab";
+@@ -16,10 +18,13 @@ router.get("/strategy-comparison", async (req, res): Promise<void> => {
+     return;
+   }
+   const configured = Number(process.env["STRATEGY_LAB_INITIAL_CAPITAL"]);
+-  const initialCapital = Number.isFinite(configured) && configured > 0 ? configured : 5_000;
++  const initialCapital =
++    Number.isFinite(configured) && configured > 0 ? configured : 5_000;
+   try {
+     const trades = await strategyComparisonStore.list(id);
+-    const timestamps = trades.flatMap((trade) => [trade.openedAt, trade.closedAt]).sort();
++    const timestamps = trades
++      .flatMap((trade) => [trade.openedAt, trade.closedAt])
++      .sort();
+     res.json({
+       ...buildComparisonSnapshot(initialCapital, trades, {
+         from: timestamps[0],
+@@ -45,14 +50,27 @@ router.post("/strategy-comparison/berto/plan", (req, res): void => {
+   }
+   try {
+     const qqq = readCandle(req.body?.qqq);
+-    const sessionOpen = finiteNumber(req.body?.sp500SessionOpen, "sp500SessionOpen");
+-    const depth = req.body?.depth === undefined
+-      ? 8
+-      : finiteInteger(req.body.depth, "depth");
+-    res.json(createBertoDailyPlan(qqq, sessionOpen, depth));
++    const sessionOpen = finiteNumber(
++      req.body?.sp500SessionOpen,
++      "sp500SessionOpen",
++    );
++    const previousSession = readPreviousSession(req.body?.previousSession);
++    const sessionKind = readSessionKind(req.body?.sessionKind);
++    const depth =
++      req.body?.depth === undefined
++        ? 10
++        : finiteInteger(req.body.depth, "depth");
++    res.json(
++      createBertoDailyPlan(qqq, sessionOpen, {
++        previousSession,
++        sessionKind,
++        depth,
++      }),
++    );
+   } catch (error) {
+     res.status(400).json({
+-      error: error instanceof Error ? error.message : "Invalid Berto plan input.",
++      error:
++        error instanceof Error ? error.message : "Invalid Berto plan input.",
+     });
+   }
+ });
+@@ -60,11 +78,33 @@ router.post("/strategy-comparison/berto/plan", (req, res): void => {
+ function userId(req: Request): string | undefined {
+   const auth = getAuth(req);
+   const claimUserId = auth?.sessionClaims?.userId;
+-  return typeof claimUserId === "string" ? claimUserId : auth?.userId ?? undefined;
++  return typeof claimUserId === "string"
++    ? claimUserId
++    : (auth?.userId ?? undefined);
++}
++
++function readPreviousSession(value: unknown): PreviousUsSession {
++  if (!value || typeof value !== "object")
++    throw new Error("previousSession is required.");
++  const row = value as Record<string, unknown>;
++  return {
++    high: finiteNumber(row.high, "previousSession.high"),
++    low: finiteNumber(row.low, "previousSession.low"),
++    close: finiteNumber(row.close, "previousSession.close"),
++    complete: row.complete === true,
++  };
++}
++
++function readSessionKind(value: unknown): BertoSessionKind {
++  if (value === undefined) return "REGULAR";
++  if (value === "REGULAR" || value === "HALF_DAY" || value === "CLOSED")
++    return value;
++  throw new Error("sessionKind must be REGULAR, HALF_DAY or CLOSED.");
+ }
+ 
+ function readCandle(value: unknown): QqqDailyCandle {
+-  if (!value || typeof value !== "object") throw new Error("qqq candle is required.");
++  if (!value || typeof value !== "object")
++    throw new Error("qqq candle is required.");
+   const row = value as Record<string, unknown>;
+   return {
+     open: finiteNumber(row.open, "qqq.open"),
+@@ -82,7 +122,8 @@ function finiteNumber(value: unknown, label: string): number {
+ 
+ function finiteInteger(value: unknown, label: string): number {
+   const parsed = finiteNumber(value, label);
+-  if (!Number.isInteger(parsed)) throw new Error(`${label} must be an integer.`);
++  if (!Number.isInteger(parsed))
++    throw new Error(`${label} must be an integer.`);
+   return parsed;
+ }
+ 
+diff --git a/artifacts/api-server/test/strategy-comparison-lab.test.ts b/artifacts/api-server/test/strategy-comparison-lab.test.ts
+index 0f3f349..c3f1dbf 100644
+--- a/artifacts/api-server/test/strategy-comparison-lab.test.ts
++++ b/artifacts/api-server/test/strategy-comparison-lab.test.ts
+@@ -4,6 +4,7 @@ import {
+   BERTO_RULES,
+   buildBertoOrders,
+   buildLevels,
++  calculateRiskSizedLots,
+   centSuffix,
+   closeBertoSession,
+   createBertoDailyPlan,
+@@ -17,373 +18,263 @@ import {
+   calculateMetrics,
+ } from "../src/lib/strategyComparisonLab";
+ 
+-test("a red QQQ candle creates an active SHORT shadow plan; a doji suspends it", () => {
+-  const plan = createBertoDailyPlan(
+-    { open: 724, high: 737.62, low: 723.18, close: 723.99 },
+-    7_529.55,
+-  );
+-  assert.equal(plan.active, true);
+-  assert.equal(plan.direction, "SHORT");
+-  assert.equal(plan.qqqCandleGreen, false);
+-  assert.equal(plan.suspensionReason, undefined);
+-  assert(plan.levels.length > 0);
+-  assert.equal(plan.executionEnabled, false);
+-  assert.equal(plan.decisionInfluence, false);
++const calm = { high: 5_020, low: 4_980, close: 5_000, complete: true };
++const green = { open: 724, high: 737.62, low: 724.18, close: 735 };
++const red = { open: 724, high: 737.69, low: 723.61, close: 723 };
+ 
+-  const doji = createBertoDailyPlan(
+-    { open: 724, high: 737.62, low: 723.18, close: 724 },
+-    7_529.55,
++test("v4.50 derives LONG, SHORT and doji suspension from the previous QQQ candle", () => {
++  assert.equal(
++    createBertoDailyPlan(green, 7_529.55, { previousSession: calm }).direction,
++    "LONG",
+   );
++  assert.equal(
++    createBertoDailyPlan(red, 7_529.55, { previousSession: calm }).direction,
++    "SHORT",
++  );
++  const doji = createBertoDailyPlan({ ...green, close: green.open }, 7_529.55, {
++    previousSession: calm,
++  });
+   assert.equal(doji.active, false);
+-  assert.equal(doji.direction, "NONE");
+   assert.equal(doji.suspensionReason, "QQQ_PREVIOUS_CANDLE_DOJI");
+ });
+ 
+-test("QQQ suffix extraction and circular de-clustering follow the fixed rules", () => {
++test("suffix extraction and direction-aware circular de-clustering match v4.50", () => {
+   assert.equal(centSuffix(724.18), 18);
+   assert.equal(centSuffix(737.62), 62);
+-  assert.deepEqual(declusterSuffixes([61, 69]), [61]);
+-  assert.deepEqual(declusterSuffixes([98, 3]), [3]);
+-  assert.deepEqual(declusterSuffixes([18, 62]), [18, 62]);
++  assert.deepEqual(declusterSuffixes([61, 69], "LONG"), [61]);
++  assert.deepEqual(declusterSuffixes([61, 69], "SHORT"), [69]);
++  assert.deepEqual(declusterSuffixes([98, 3], "LONG"), [3]);
++  assert.deepEqual(declusterSuffixes([98, 3], "SHORT"), [98]);
+ });
+ 
+-test("level grid includes levels on both sides of the session open without a distance cutoff", () => {
+-  const levels = buildLevels(7_529.55, [18, 62], 3);
++test("level grid retains only levels within fifty points of the US500 open", () => {
++  const levels = buildLevels(7_529.55, [18, 62]);
+   assert.deepEqual(
+-    levels.map((level) => level.price),
+-    [7_218, 7_262, 7_318, 7_362, 7_418, 7_462, 7_518, 7_562, 7_618, 7_662, 7_718, 7_762, 7_818, 7_862],
++    levels.map((x) => x.price),
++    [7_518, 7_562],
+   );
+-  assert(levels.some((level) => level.price < 7_529.55));
+-  assert(levels.some((level) => level.price > 7_529.55));
+-  assert(levels.every((level) => level.distanceFromOpen === Number(Math.abs(level.price - 7_529.55).toFixed(6))));
+-  assert.equal(levels.find((level) => level.price === 7_518)?.distanceFromOpen, 11.55);
++  assert(levels.every((x) => x.distanceFromOpen <= 50));
+ });
+ 
+-test("green QQQ candle creates a LONG shadow-only Berto plan with Rome session rules", () => {
+-  const plan = createBertoDailyPlan(
+-    { open: 724, high: 737.62, low: 724.18, close: 735 },
+-    7_529.55,
+-    2,
+-  );
+-
+-  assert.equal(plan.active, true);
+-  assert.equal(plan.direction, "LONG");
+-  assert.deepEqual(plan.rawSuffixes, [18, 62]);
+-  assert.deepEqual(plan.validSuffixes, [18, 62]);
+-  assert.deepEqual(
+-    [plan.rules.contracts, plan.rules.breakoutPoints, plan.rules.stopOffsetPoints, plan.rules.takeProfitOffsetPoints],
+-    [1, 8, 5, 30],
++test("previous-session range is fail-closed and 1.3 percent is blocked", () => {
++  const missing = createBertoDailyPlan(green, 7_529.55, {
++    previousSession: { ...calm, complete: false },
++  });
++  assert.equal(missing.suspensionReason, "PREVIOUS_SESSION_RANGE_UNAVAILABLE");
++  const threshold = createBertoDailyPlan(green, 7_529.55, {
++    previousSession: { high: 5_065, low: 5_000, close: 5_000, complete: true },
++  });
++  assert.equal(threshold.previousSessionRangePct, 1.3);
++  assert.equal(threshold.suspensionReason, "PREVIOUS_SESSION_RANGE_TOO_HIGH");
++  assert.equal(
++    createBertoDailyPlan(green, 7_529.55, { previousSession: calm }).active,
++    true,
+   );
+-  assert.equal(plan.rules.timezone, "Europe/Rome");
+-  assert.equal(plan.rules.entryWindowStart, "15:30");
+-  assert.equal(plan.rules.forcedExit, "21:55");
+-  assert.equal(plan.mode, "SHADOW");
+-  assert.equal(plan.executionEnabled, false);
+ });
+ 
+-test("a pre-window crossing leaves a level armed, while a 15:30 Rome crossing discards it", () => {
+-  const armed = evaluateFirstTouch(
+-    { price: 7_462, state: "ARMED" },
+-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:29:00.000Z" },
+-    "LONG",
+-  );
+-  assert.equal(armed.state, "ARMED");
+-
+-  const discarded = evaluateFirstTouch(
+-    armed,
+-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:30:00.000Z" },
+-    "LONG",
++test("closed and half-day sessions are explicit, without a hardcoded holiday list", () => {
++  assert.equal(
++    createBertoDailyPlan(green, 7_529.55, {
++      previousSession: calm,
++      sessionKind: "CLOSED",
++    }).suspensionReason,
++    "MARKET_CLOSED",
+   );
+-  assert.equal(discarded.state, "DISCARDED_1530_TOUCH");
+-  assert.equal(discarded.firstTouchedAt, "2026-09-24T13:30:00.000Z");
+   assert.equal(
+-    evaluateFirstTouch(discarded, { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" }, "LONG"),
+-    discarded,
++    createBertoDailyPlan(green, 7_529.55, {
++      previousSession: calm,
++      sessionKind: "HALF_DAY",
++    }).sessionClose,
++    "12:55",
+   );
+ });
+ 
+-test("a valid LONG first touch creates a linked one-contract BUY STOP immediately", () => {
++test("opening-minute touch is discarded; valid approach arms breakout at plus eight", () => {
++  const opening = evaluateFirstTouch(
++    { price: 7_518, state: "ARMED" },
++    {
++      low: 7_517,
++      high: 7_519,
++      previousClose: 7_516,
++      at: "2026-09-24T13:30:00Z",
++    },
++    "LONG",
++  );
++  assert.equal(opening.state, "DISCARDED_OPENING_MINUTE_TOUCH");
+   const pending = evaluateFirstTouch(
+-    { price: 7_462, state: "ARMED" },
+-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
++    { price: 7_518, state: "ARMED" },
++    {
++      low: 7_517,
++      high: 7_519,
++      previousClose: 7_516,
++      at: "2026-09-24T13:31:00Z",
++    },
+     "LONG",
+   );
+-  assert.equal(pending.state, "PENDING_STOP");
+-  assert.equal(pending.firstTouchedAt, "2026-09-24T13:31:00.000Z");
++  assert.equal(pending.state, "PENDING_BREAKOUT");
+   assert.deepEqual(pending.order, {
+     direction: "LONG",
+     kind: "STOP",
+-    contracts: 1,
+-    entryStop: 7_470,
+-    stopLoss: 7_457,
+-    takeProfit: 7_492,
++    entryStop: 7_526,
++    stopLoss: 7_513,
++    takeProfit: null,
++    trailingDistancePoints: 25,
++    riskPercent: 2,
+   });
+-  assert.equal(fillBertoPending(pending, { low: 7_461, high: 7_470, at: "2026-09-24T13:31:00.000Z" }), pending);
+-  const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: "2026-09-24T13:32:00.000Z" });
+-  assert.equal(open.state, "POSITION_OPEN");
+-  assert.equal(open.positionOpenedAt, "2026-09-24T13:32:00.000Z");
+-  assert.equal(evaluateFirstTouch(open, { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:33:00.000Z" }, "LONG"), open);
+-
+-  const wrongApproach = evaluateFirstTouch(
+-    { price: 7_462, state: "ARMED" },
+-    { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
+-    "LONG",
+-  );
+-  assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
+-  assert.equal(wrongApproach.order, undefined);
++});
+ 
+-  const expired = evaluateFirstTouch(
+-    { price: 7_362, state: "ARMED" },
+-    { low: 7_499, high: 7_501, previousClose: 7_498, at: "2026-09-24T19:55:00.000Z" },
++test("breakout rejects excessive spread or chase and opens otherwise", () => {
++  const pending = evaluateFirstTouch(
++    { price: 7_518, state: "ARMED" },
++    {
++      low: 7_517,
++      high: 7_519,
++      previousClose: 7_516,
++      at: "2026-09-24T13:31:00Z",
++    },
+     "LONG",
+   );
+-  assert.equal(expired.state, "EXPIRED");
+-});
+-
+-test("a SHORT plan creates a one-contract SELL STOP from above and rejects an approach from below", () => {
+-  const plan = createBertoDailyPlan(
+-    { open: 724, high: 737.62, low: 723.18, close: 723.99 },
+-    7_529.55,
++  assert.equal(
++    fillBertoPending(pending, {
++      low: 7_518,
++      high: 7_530,
++      executionPrice: 7_526,
++      spreadPoints: 2.1,
++      at: "2026-09-24T13:32:00Z",
++    }).state,
++    "DISCARDED_SPREAD",
+   );
+-  assert.equal(plan.direction, "SHORT");
+-  assert.equal(plan.mode, "SHADOW");
+-  assert.equal(plan.executionEnabled, false);
+-  const level = plan.levels.find((candidate) => candidate.price === 7_462);
+-  assert(level);
+-
+-  const pending = evaluateFirstTouch(
+-    level,
+-    { low: 7_461, high: 7_463, previousClose: 7_464, at: "2026-09-24T13:31:00.000Z" },
+-    plan.direction,
++  assert.equal(
++    fillBertoPending(pending, {
++      low: 7_518,
++      high: 7_530,
++      executionPrice: 7_528.01,
++      spreadPoints: 1,
++      at: "2026-09-24T13:32:00Z",
++    }).state,
++    "DISCARDED_CHASE",
+   );
+-  assert.equal(pending.state, "PENDING_STOP");
+-  assert.equal(pending.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+-  assert.deepEqual(pending.order, {
+-    direction: "SHORT",
+-    kind: "STOP",
+-    contracts: 1,
+-    entryStop: 7_454,
+-    stopLoss: 7_467,
+-    takeProfit: 7_432,
++  const open = fillBertoPending(pending, {
++    low: 7_518,
++    high: 7_526,
++    executionPrice: 7_526,
++    spreadPoints: 1,
++    at: "2026-09-24T13:32:00Z",
+   });
+-  assert.deepEqual(buildBertoOrders(pending.price, plan.direction), pending.order);
+-  assert.equal(fillBertoPending(pending, { low: 7_455, high: 7_464, at: "2026-09-24T13:32:00.000Z" }), pending);
+-  const open = fillBertoPending(pending, { low: 7_454, high: 7_464, at: "2026-09-24T13:33:00.000Z" });
+   assert.equal(open.state, "POSITION_OPEN");
+-  assert.equal(open.positionOpenedAt, "2026-09-24T13:33:00.000Z");
+-
+-  const wrongApproach = evaluateFirstTouch(
+-    level,
+-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
+-    plan.direction,
+-  );
+-  assert.equal(wrongApproach.state, "DISCARDED_WRONG_APPROACH");
+-  assert.equal(wrongApproach.firstTouchedAt, "2026-09-24T13:31:00.000Z");
+-  assert.equal(wrongApproach.order, undefined);
++  assert.equal(open.currentStop, 7_513);
+ });
+ 
+-test("BERTO entry and expiry follow Rome daylight saving time across both clock changes", () => {
+-  // Weekdays immediately before and after the 2026 spring and autumn clock changes.
+-  const sessions = [
+-    { date: "2026-03-27", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
+-    { date: "2026-03-30", offset: "CEST (UTC+2)", entryUtc: "13:30", exitUtc: "19:55" },
+-    { date: "2026-10-23", offset: "CEST (UTC+2)", entryUtc: "13:30", exitUtc: "19:55" },
+-    { date: "2026-10-26", offset: "CET (UTC+1)", entryUtc: "14:30", exitUtc: "20:55" },
+-  ] as const;
+-  const level = { price: 7_462, state: "ARMED" as const };
+-  const candleAt = (at: string, direction: "LONG" | "SHORT") => ({
+-    low: 7_461,
+-    high: 7_463,
+-    previousClose: direction === "SHORT" ? 7_464 : 7_460,
+-    at,
++test("trailing uses closed M1 candles, activates beyond level plus twenty and has no fixed TP", () => {
++  const pending = evaluateFirstTouch(
++    { price: 7_518, state: "ARMED" },
++    {
++      low: 7_517,
++      high: 7_519,
++      previousClose: 7_516,
++      at: "2026-09-24T13:31:00Z",
++    },
++    "LONG",
++  );
++  const open = fillBertoPending(pending, {
++    low: 7_518,
++    high: 7_526,
++    at: "2026-09-24T13:32:00Z",
+   });
+-  const minuteBefore = (iso: string) => new Date(Date.parse(iso) - 60_000).toISOString();
+-  const minuteAfter = (iso: string) => new Date(Date.parse(iso) + 60_000).toISOString();
+-
+-  for (const { date, offset, entryUtc, exitUtc } of sessions) {
+-    const entry = `${date}T${entryUtc}:00.000Z`;
+-    const exit = `${date}T${exitUtc}:00.000Z`;
+-    const context = `${date} ${offset}`;
+-    const romeTime = new Intl.DateTimeFormat("en-GB", {
+-      timeZone: "Europe/Rome",
+-      hour: "2-digit",
+-      minute: "2-digit",
+-      hourCycle: "h23",
+-    });
+-    assert.equal(romeTime.format(new Date(entry)), "15:30", `${context} entry UTC mapping`);
+-    assert.equal(romeTime.format(new Date(exit)), "21:55", `${context} exit UTC mapping`);
+-
+-    for (const direction of ["LONG", "SHORT"] as const) {
+-      const caseContext = `${context} ${direction}`;
+-      const beforeEntry = evaluateFirstTouch(level, candleAt(minuteBefore(entry), direction), direction);
+-      assert.equal(beforeEntry.state, "ARMED", `${caseContext} 15:29 crossing`);
+-      const atEntry = evaluateFirstTouch(beforeEntry, candleAt(entry, direction), direction);
+-      assert.equal(atEntry.state, "DISCARDED_1530_TOUCH", `${caseContext} 15:30 crossing`);
+-      assert.equal(atEntry.firstTouchedAt, entry, `${caseContext} discarded at 15:30`);
+-      assert.equal(evaluateFirstTouch(atEntry, candleAt(minuteAfter(entry), direction), direction), atEntry);
+-
+-      const outsideAtEntry = direction === "LONG"
+-        ? { low: 7_459, high: 7_461, previousClose: 7_460, at: entry }
+-        : { low: 7_463, high: 7_465, previousClose: 7_464, at: entry };
+-      const stillArmed = evaluateFirstTouch(level, outsideAtEntry, direction);
+-      assert.deepEqual(stillArmed, level, `${caseContext} 15:30 candle outside level stays ARMED without a touch timestamp`);
+-      const laterTouch = evaluateFirstTouch(stillArmed, candleAt(minuteAfter(entry), direction), direction);
+-      assert.equal(laterTouch.state, "PENDING_STOP", `${caseContext} untouched level can be touched at 15:31`);
+-      assert.equal(laterTouch.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch is recorded at 15:31`);
+-      assert.equal(laterTouch.order?.direction, direction, `${caseContext} correct pending STOP direction`);
+-
+-      const afterEntry = evaluateFirstTouch(level, candleAt(minuteAfter(entry), direction), direction);
+-      assert.equal(afterEntry.state, "PENDING_STOP", `${caseContext} 15:31 approach`);
+-      assert.equal(afterEntry.firstTouchedAt, minuteAfter(entry), `${caseContext} first touch from ${direction === "SHORT" ? "above" : "below"}`);
+-
+-      const beforeExit = evaluateFirstTouch(level, candleAt(minuteBefore(exit), direction), direction);
+-      assert.equal(beforeExit.state, "PENDING_STOP", `${caseContext} 21:54 approach`);
+-      assert.equal(beforeExit.firstTouchedAt, minuteBefore(exit), `${caseContext} 21:54 first touch`);
+-      assert.equal(evaluateFirstTouch(level, candleAt(exit, direction), direction).state, "EXPIRED", `${caseContext} 21:55 crossing`);
+-      assert.equal(evaluateFirstTouch(level, candleAt(minuteAfter(exit), direction), direction).state, "EXPIRED", `${caseContext} 21:56 crossing`);
+-    }
+-  }
+-});
+-
+-test("exact candle-edge contacts at 15:30 Rome discard a level, while an untouched level can arm later", () => {
+-  const sessions = [
+-    { date: "2026-03-27", entryUtc: "14:30" },
+-    { date: "2026-03-30", entryUtc: "13:30" },
+-    { date: "2026-10-23", entryUtc: "13:30" },
+-    { date: "2026-10-26", entryUtc: "14:30" },
+-  ] as const;
+-  const cases = [
+-    { direction: "LONG", edge: "low", low: 7_462, high: 7_463, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
+-    { direction: "LONG", edge: "high", low: 7_461, high: 7_462, previousClose: 7_460, outsideLow: 7_459, outsideHigh: 7_461 },
+-    { direction: "SHORT", edge: "low", low: 7_462, high: 7_463, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
+-    { direction: "SHORT", edge: "high", low: 7_461, high: 7_462, previousClose: 7_464, outsideLow: 7_463, outsideHigh: 7_465 },
+-  ] as const;
+-  const level = { price: 7_462, state: "ARMED" as const };
+-  for (const { date, entryUtc } of sessions) {
+-    const entry = `${date}T${entryUtc}:00.000Z`;
+-    const later = new Date(Date.parse(entry) + 60_000).toISOString();
+-    for (const { direction, edge, low, high, previousClose, outsideLow, outsideHigh } of cases) {
+-      const context = `${date} ${direction} ${edge}`;
+-      const candle = { low, high, previousClose };
+-      const discarded = evaluateFirstTouch(level, { ...candle, at: entry }, direction);
+-      assert.equal(discarded.state, "DISCARDED_1530_TOUCH", context);
+-      assert.equal(discarded.firstTouchedAt, entry, context);
+-      assert.equal(discarded.order, undefined, context);
+-      assert.equal(evaluateFirstTouch(discarded, { ...candle, at: later }, direction), discarded, context);
+-
+-      const untouched = evaluateFirstTouch(level, {
+-        low: outsideLow, high: outsideHigh, previousClose, at: entry,
+-      }, direction);
+-      assert.deepEqual(untouched, level, context);
+-      assert.equal(evaluateFirstTouch(untouched, { ...candle, at: later }, direction).state, "PENDING_STOP", context);
+-    }
+-  }
++  const inactive = evaluateBertoPositionExit(open, {
++    low: 7_520,
++    high: 7_538,
++    at: "2026-09-24T13:33:00Z",
++  });
++  assert.equal(inactive.currentStop, 7_513);
++  const trailed = evaluateBertoPositionExit(inactive, {
++    low: 7_530,
++    high: 7_543,
++    at: "2026-09-24T13:34:00Z",
++  });
++  assert.equal(trailed.currentStop, 7_518);
++  const stopped = evaluateBertoPositionExit(trailed, {
++    low: 7_518,
++    high: 7_540,
++    at: "2026-09-24T13:35:00Z",
++  });
++  assert.equal(stopped.state, "CLOSED_STOP_LOSS");
++  assert.equal(stopped.pnlPoints, -8);
+ });
+ 
+-test("LONG and SHORT positions close at their linked SL or TP; simultaneous barriers count as SL", () => {
+-  for (const direction of ["LONG", "SHORT"] as const) {
+-    const pending = evaluateFirstTouch(
+-      { price: 7_462, state: "ARMED" },
+-      { low: 7_461, high: 7_463, previousClose: direction === "LONG" ? 7_460 : 7_464, at: "2026-09-24T13:31:00.000Z" },
+-      direction,
+-    );
+-    const open = fillBertoPending(pending, {
+-      low: direction === "LONG" ? 7_463 : 7_454,
+-      high: direction === "LONG" ? 7_470 : 7_461,
+-      at: "2026-09-24T13:32:00.000Z",
+-    });
+-    assert.equal(open.state, "POSITION_OPEN");
+-    assert.equal(evaluateBertoPositionExit(open, { low: 7_430, high: 7_495, at: "2026-09-24T13:32:00.000Z" }), open, "no same-candle exit");
+-    assert(open.order);
+-    const stop = evaluateBertoPositionExit(open, {
+-      low: direction === "LONG" ? open.order.stopLoss : 7_440,
+-      high: direction === "SHORT" ? open.order.stopLoss : 7_460,
+-      at: "2026-09-24T13:33:00.000Z",
+-    });
+-    assert.equal(stop.state, "CLOSED_STOP_LOSS");
+-    assert.equal(stop.pnlPoints, -13);
+-    assert.equal(stop.exitPrice, open.order.stopLoss);
+-    const profit = evaluateBertoPositionExit(open, {
+-      low: direction === "SHORT" ? open.order.takeProfit : 7_470,
+-      high: direction === "LONG" ? open.order.takeProfit : 7_454,
+-      at: "2026-09-24T13:33:00.000Z",
+-    });
+-    assert.equal(profit.state, "CLOSED_TAKE_PROFIT");
+-    assert.equal(profit.pnlPoints, 22);
+-    assert.equal(profit.exitPrice, open.order.takeProfit);
+-    assert.equal(evaluateBertoPositionExit(open, { low: 7_430, high: 7_495, at: "2026-09-24T13:33:00.000Z" }).state, "CLOSED_STOP_LOSS");
+-    assert.equal(evaluateBertoPositionExit(stop, { low: 7_430, high: 7_495, at: "2026-09-24T13:34:00.000Z" }), stop);
+-  }
++test("risk sizing uses strategy balance, floors to lot step and rejects dangerous minimum lot", () => {
++  assert.equal(
++    calculateRiskSizedLots({
++      balance: 5_000,
++      riskPerLot: 50,
++      minimumLot: 0.01,
++      lotStep: 0.01,
++      brokerMaximumLot: 100,
++    }),
++    2,
++  );
++  assert.equal(
++    calculateRiskSizedLots({
++      balance: 1_000,
++      riskPerLot: 5_000,
++      minimumLot: 0.1,
++      lotStep: 0.1,
++      brokerMaximumLot: 100,
++    }),
++    0,
++  );
+ });
+ 
+-test("unfilled pending orders are cancelled and open positions are closed at market at 21:55 Rome", () => {
+-  const at = "2026-09-24T19:55:00.000Z";
++test("regular and half-day close are final and prevent post-session fills", () => {
+   const pending = evaluateFirstTouch(
+-    { price: 7_462, state: "ARMED" },
+-    { low: 7_461, high: 7_463, previousClose: 7_460, at: "2026-09-24T13:31:00.000Z" },
++    { price: 7_518, state: "ARMED" },
++    {
++      low: 7_517,
++      high: 7_519,
++      previousClose: 7_516,
++      at: "2026-09-24T13:31:00Z",
++    },
+     "LONG",
+   );
+-  assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_469, at: "2026-09-24T13:32:00.000Z" }), pending);
+-  const shortPending = evaluateFirstTouch(
+-    { price: 7_562, state: "ARMED" },
+-    { low: 7_561, high: 7_563, previousClose: 7_564, at: "2026-09-24T13:31:00.000Z" },
+-    "SHORT",
++  const open = fillBertoPending(pending, {
++    low: 7_518,
++    high: 7_526,
++    at: "2026-09-24T13:32:00Z",
++  });
++  assert.deepEqual(
++    closeBertoSession([pending], "2026-09-24T19:54:00Z", 7_520),
++    [pending],
++  );
++  const closed = closeBertoSession(
++    [pending, open],
++    "2026-09-24T19:55:00Z",
++    7_520,
++  );
++  assert.deepEqual(
++    closed.map((x) => x.state),
++    ["CANCELLED_SESSION_END", "CLOSED_FORCED"],
++  );
++  const half = closeBertoSession(
++    [open],
++    "2026-09-24T16:55:00Z",
++    7_520,
++    "HALF_DAY",
++  );
++  assert.equal(half[0]?.state, "CLOSED_FORCED");
++  assert.equal(
++    fillBertoPending(closed[0]!, {
++      low: 7_500,
++      high: 7_540,
++      at: "2026-09-24T19:56:00Z",
++    }),
++    closed[0],
+   );
+-  const open = fillBertoPending(shortPending, { low: 7_554, high: 7_560, at: "2026-09-24T13:32:00.000Z" });
+-  assert.equal(open.state, "POSITION_OPEN");
+-  const levels = [pending, open, { price: 7_662, state: "ARMED" as const }];
+-  assert.equal(closeBertoSession(levels, "2026-09-24T19:54:00.000Z", 7_550), levels);
+-  const closed = closeBertoSession(levels, at, 7_550);
+-  assert.deepEqual(closed.map((level) => level.state), ["CANCELLED_2155", "CLOSED_FORCED", "EXPIRED"]);
+-  assert.equal(closed[0]?.closedAt, at);
+-  assert.equal(closed[1]?.exitPrice, 7_550);
+-  assert.equal(closed[1]?.pnlPoints, 4);
+-  assert.deepEqual(closeBertoSession(closed, at, 7_550), closed, "session close is idempotent");
+-  assert.equal(fillBertoPending(closed[0]!, { low: 7_460, high: 7_480, at }), closed[0], "cancelled pending cannot reopen");
+-  assert.equal(evaluateBertoPositionExit(closed[1]!, { low: 7_430, high: 7_580, at }), closed[1], "forced close is final");
+-});
+-
+-test("no pending STOP fills or SL/TP exits at or after 21:55 in CET and CEST", () => {
+-  const sessions = [
+-    { date: "2026-03-27", exitUtc: "20:55" },
+-    { date: "2026-03-30", exitUtc: "19:55" },
+-    { date: "2026-10-23", exitUtc: "19:55" },
+-    { date: "2026-10-26", exitUtc: "20:55" },
+-  ] as const;
+-
+-  for (const { date, exitUtc } of sessions) {
+-    const at = `${date}T${exitUtc}:00.000Z`;
+-    const firstTouchedAt = new Date(Date.parse(at) - 120_000).toISOString();
+-    const filledAt = new Date(Date.parse(at) - 60_000).toISOString();
+-    const pending = {
+-      price: 7_462, state: "PENDING_STOP" as const, firstTouchedAt,
+-      order: buildBertoOrders(7_462, "LONG"),
+-    };
+-    const open = fillBertoPending(pending, { low: 7_463, high: 7_470, at: filledAt });
+-    assert.equal(open.state, "POSITION_OPEN");
+-    for (const blockedAt of [at, new Date(Date.parse(at) + 60_000).toISOString(), new Date(Date.parse(at) + 18 * 60 * 60_000).toISOString()]) {
+-      assert.equal(fillBertoPending(pending, { low: 7_450, high: 7_490, at: blockedAt }), pending);
+-      assert.equal(evaluateBertoPositionExit(open, { low: 7_450, high: 7_495, at: blockedAt }), open);
+-    }
+-    assert.deepEqual(closeBertoSession([pending, open], at, 7_468).map((level) => level.state), ["CANCELLED_2155", "CLOSED_FORCED"]);
+-  }
+-});
+-
+-test("BERTO refuses fills without a session anchor or before the first touch", () => {
+-  const at = "2026-09-24T13:32:00.000Z";
+-  const unanchored = { price: 7_462, state: "PENDING_STOP" as const, order: buildBertoOrders(7_462, "LONG") };
+-  assert.equal(fillBertoPending(unanchored, { low: 7_463, high: 7_470, at }), unanchored);
+-  const pending = { ...unanchored, firstTouchedAt: "2026-09-24T13:33:00.000Z" };
+-  assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_470, at }), pending);
+-  assert.equal(fillBertoPending(pending, { low: 7_463, high: 7_470, at: "2026-09-25T13:34:00.000Z" }), pending);
+-  const openWithoutTime = { ...unanchored, state: "POSITION_OPEN" as const };
+-  assert.equal(evaluateBertoPositionExit(openWithoutTime, { low: 7_457, high: 7_492, at }), openWithoutTime);
+ });
+ 
+-test("comparison lab keeps equal capital and isolated metrics", () => {
+-  const snapshot = buildComparisonSnapshot(5_000, [
++test("comparison lab keeps equal capital, isolated metrics and SHADOW-only Berto", () => {
++  const trades = [
+     {
+-      strategy: "FIVE_BRAINS_STRATEGY",
++      strategy: "FIVE_BRAINS_STRATEGY" as const,
+       openedAt: "2026-01-02T15:00:00Z",
+       closedAt: "2026-01-02T16:00:00Z",
+       initialCapital: 5_000,
+@@ -393,7 +284,7 @@ test("comparison lab keeps equal capital and isolated metrics", () => {
+       slippage: 1,
+     },
+     {
+-      strategy: "BERTO_GOLDEN_SETUP",
++      strategy: "BERTO_GOLDEN_SETUP" as const,
+       openedAt: "2026-01-03T15:00:00Z",
+       closedAt: "2026-01-03T16:00:00Z",
+       initialCapital: 5_000,
+@@ -402,44 +293,17 @@ test("comparison lab keeps equal capital and isolated metrics", () => {
+       fees: 2,
+       slippage: 1,
+     },
+-  ]);
+-  assert.equal(snapshot.initialCapital, 5_000);
+-  assert.equal(snapshot.isolatedPortfolios, true);
+-  assert.equal(snapshot.decisionCrossInfluence, false);
+-  assert.equal(snapshot.executionEnabled, false);
++  ];
++  const snapshot = buildComparisonSnapshot(5_000, trades);
+   assert.equal(snapshot.strategies.FIVE_BRAINS_STRATEGY.finalCapital, 5_100);
+   assert.equal(snapshot.strategies.BERTO_GOLDEN_SETUP.finalCapital, 4_950);
+-});
+-
+-test("performance metrics include net return, profit factor, expectancy and drawdown", () => {
+-  const metrics = calculateMetrics(1_000, [
+-    {
+-      strategy: "BERTO_GOLDEN_SETUP",
+-      openedAt: "2026-01-02T15:00:00Z",
+-      closedAt: "2026-01-02T16:00:00Z",
+-      initialCapital: 1_000,
+-      netPnl: 100,
+-      riskAmount: 50,
+-      fees: 2,
+-      slippage: 1,
+-    },
+-    {
+-      strategy: "BERTO_GOLDEN_SETUP",
+-      openedAt: "2026-01-03T15:00:00Z",
+-      closedAt: "2026-01-03T16:00:00Z",
+-      initialCapital: 1_000,
+-      netPnl: -50,
+-      riskAmount: 50,
+-      fees: 2,
+-      slippage: 1,
+-    },
+-  ]);
+-  assert.equal(metrics.finalCapital, 1_050);
+-  assert.equal(metrics.netReturnPct, 5);
+-  assert.equal(metrics.winRatePct, 50);
+-  assert.equal(metrics.profitFactor, 2);
+-  assert.equal(metrics.expectancyR, 0.5);
+-  assert.equal(metrics.totalCosts, 6);
+-  assert(metrics.maxDrawdownPct > 0);
++  assert.equal(snapshot.isolatedPortfolios, true);
++  assert.equal(snapshot.decisionCrossInfluence, false);
+   assert.equal(BERTO_RULES.executionEnabled, false);
++  assert.equal(BERTO_RULES.version, "4.50.0");
++  const metrics = calculateMetrics(
++    5_000,
++    trades.filter((x) => x.strategy === "BERTO_GOLDEN_SETUP"),
++  );
++  assert.equal(metrics.closedTrades, 1);
+ });
+diff --git a/artifacts/trading-ai-platform/src/pages/strategy-comparison.tsx b/artifacts/trading-ai-platform/src/pages/strategy-comparison.tsx
+index 25edcb7..7ab2cda 100644
+--- a/artifacts/trading-ai-platform/src/pages/strategy-comparison.tsx
++++ b/artifacts/trading-ai-platform/src/pages/strategy-comparison.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useState, type ReactNode } from 'react';
++import { useEffect, useState, type ReactNode } from "react";
+ import {
+   ArrowRightLeft,
+   Bot,
+@@ -11,8 +11,8 @@ import {
+   TrendingDown,
+   TrendingUp,
+   WalletCards,
+-} from 'lucide-react';
+-import { Badge, Notice, PageHeader, SectionLabel } from '@/components/common';
++} from "lucide-react";
++import { Badge, Notice, PageHeader, SectionLabel } from "@/components/common";
+ 
+ type Metrics = {
+   initialCapital: number;
+@@ -30,24 +30,30 @@ type Metrics = {
+ };
+ 
+ type BertoRules = {
++  version: string;
+   signalSymbol: string;
+   executionSymbol: string;
+   timezone: string;
+   sessionOpen: string;
+-  entryWindowStart: string;
+-  forcedExit: string;
+-  minimumDistancePoints: number;
++  regularForcedExit: string;
++  halfDayForcedExit: string;
++  breakoutPoints: number;
++  initialStopPoints: number;
++  trailingDistancePoints: number;
++  trailingActivationFromLevelPoints: number;
++  maximumDistanceFromOpenPoints: number;
++  maximumPreviousRangePct: number;
++  maximumChasePoints: number;
++  maximumSpreadPoints: number;
+   suffixClusterDistance: number;
+-  stopLossPoints: number;
+-  takeProfitPoints: number;
+-  originalRiskPerTradePct: number;
+-  normalizedComparisonRiskPct: number;
++  riskPerTradePct: number;
++  prudentStartingRiskPct: number;
+   executionEnabled: false;
+-  mode: 'SHADOW';
++  mode: "SHADOW";
+ };
+ 
+ type Snapshot = {
+-  mode: 'SHADOW';
++  mode: "SHADOW";
+   executionEnabled: false;
+   sharedMarketData: true;
+   isolatedPortfolios: true;
+@@ -58,9 +64,9 @@ type Snapshot = {
+     BERTO_GOLDEN_SETUP: Metrics;
+   };
+   bertoRules: BertoRules;
+-  verdict: 'INSUFFICIENT_DATA';
++  verdict: "INSUFFICIENT_DATA";
+   minimumClosedTradesForReview: number;
+-  persistence?: { status: 'healthy' | 'degraded'; message?: string };
++  persistence?: { status: "healthy" | "degraded"; message?: string };
+ };
+ 
+ const emptyMetrics = (capital = 5_000): Metrics => ({
+@@ -79,7 +85,7 @@ const emptyMetrics = (capital = 5_000): Metrics => ({
+ });
+ 
+ const fallback: Snapshot = {
+-  mode: 'SHADOW',
++  mode: "SHADOW",
+   executionEnabled: false,
+   sharedMarketData: true,
+   isolatedPortfolios: true,
+@@ -90,34 +96,46 @@ const fallback: Snapshot = {
+     BERTO_GOLDEN_SETUP: emptyMetrics(),
+   },
+   bertoRules: {
+-    signalSymbol: 'QQQ',
+-    executionSymbol: 'US500',
+-    timezone: 'America/New_York',
+-    sessionOpen: '09:30',
+-    entryWindowStart: '10:00',
+-    forcedExit: '15:55',
+-    minimumDistancePoints: 20,
++    version: "4.50.0",
++    signalSymbol: "QQQ",
++    executionSymbol: "US500",
++    timezone: "America/New_York",
++    sessionOpen: "09:30",
++    regularForcedExit: "15:55",
++    halfDayForcedExit: "12:55",
++    breakoutPoints: 8,
++    initialStopPoints: 13,
++    trailingDistancePoints: 25,
++    trailingActivationFromLevelPoints: 20,
++    maximumDistanceFromOpenPoints: 50,
++    maximumPreviousRangePct: 1.3,
++    maximumChasePoints: 2,
++    maximumSpreadPoints: 2,
+     suffixClusterDistance: 10,
+-    stopLossPoints: 31,
+-    takeProfitPoints: 89,
+-    originalRiskPerTradePct: 5,
+-    normalizedComparisonRiskPct: 0.5,
++    riskPerTradePct: 2,
++    prudentStartingRiskPct: 1,
+     executionEnabled: false,
+-    mode: 'SHADOW',
++    mode: "SHADOW",
+   },
+-  verdict: 'INSUFFICIENT_DATA',
++  verdict: "INSUFFICIENT_DATA",
+   minimumClosedTradesForReview: 100,
+-  persistence: { status: 'degraded', message: 'Dati persistenti non ancora caricati.' },
++  persistence: {
++    status: "degraded",
++    message: "Dati persistenti non ancora caricati.",
++  },
+ };
+ 
+-const money = (value: number) => new Intl.NumberFormat('it-IT', {
+-  style: 'currency',
+-  currency: 'EUR',
+-  maximumFractionDigits: 2,
+-}).format(value);
++const money = (value: number) =>
++  new Intl.NumberFormat("it-IT", {
++    style: "currency",
++    currency: "EUR",
++    maximumFractionDigits: 2,
++  }).format(value);
+ 
+-const number = (value: number | null, suffix = '') =>
+-  value === null ? '—' : `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(value)}${suffix}`;
++const number = (value: number | null, suffix = "") =>
++  value === null
++    ? "—"
++    : `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(value)}${suffix}`;
+ 
+ function StrategyCard({
+   title,
+@@ -130,184 +148,431 @@ function StrategyCard({
+   title: string;
+   subtitle: string;
+   status: string;
+-  tone: 'positive' | 'amber';
++  tone: "positive" | "amber";
+   metrics: Metrics;
+   description: ReactNode;
+ }) {
+-  return <section className="rounded-xl border border-border bg-card/70 p-5">
+-    <div className="mb-4 flex items-start justify-between gap-3">
+-      <div><p className="eyebrow mb-2">{subtitle}</p><h2 className="display text-2xl font-bold text-foreground">{title}</h2></div>
+-      <Badge tone={tone}>{status}</Badge>
+-    </div>
+-    <p className="mb-4 text-xs leading-relaxed text-muted-foreground">{description}</p>
+-    <div className="grid grid-cols-2 gap-2">
+-      <div className="rounded-md bg-secondary/45 p-3"><WalletCards size={14} className="mb-2 text-primary" /><p className="eyebrow">Capitale virtuale</p><p className="mono mt-1 text-sm text-foreground">{money(metrics.finalCapital)}</p></div>
+-      <div className="rounded-md bg-secondary/45 p-3"><TrendingUp size={14} className="mb-2 text-accent" /><p className="eyebrow">Rendimento netto</p><p className="mono mt-1 text-sm text-foreground">{number(metrics.netReturnPct, '%')}</p></div>
+-      <div className="rounded-md bg-secondary/45 p-3"><Target size={14} className="mb-2 text-primary" /><p className="eyebrow">Trade chiusi</p><p className="mono mt-1 text-sm text-foreground">{metrics.closedTrades}</p></div>
+-      <div className="rounded-md bg-secondary/45 p-3"><TrendingDown size={14} className="mb-2 text-destructive" /><p className="eyebrow">Max drawdown</p><p className="mono mt-1 text-sm text-foreground">{number(metrics.maxDrawdownPct, '%')}</p></div>
+-    </div>
+-  </section>;
++  return (
++    <section className="rounded-xl border border-border bg-card/70 p-5">
++      <div className="mb-4 flex items-start justify-between gap-3">
++        <div>
++          <p className="eyebrow mb-2">{subtitle}</p>
++          <h2 className="display text-2xl font-bold text-foreground">
++            {title}
++          </h2>
++        </div>
++        <Badge tone={tone}>{status}</Badge>
++      </div>
++      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
++        {description}
++      </p>
++      <div className="grid grid-cols-2 gap-2">
++        <div className="rounded-md bg-secondary/45 p-3">
++          <WalletCards size={14} className="mb-2 text-primary" />
++          <p className="eyebrow">Capitale virtuale</p>
++          <p className="mono mt-1 text-sm text-foreground">
++            {money(metrics.finalCapital)}
++          </p>
++        </div>
++        <div className="rounded-md bg-secondary/45 p-3">
++          <TrendingUp size={14} className="mb-2 text-accent" />
++          <p className="eyebrow">Rendimento netto</p>
++          <p className="mono mt-1 text-sm text-foreground">
++            {number(metrics.netReturnPct, "%")}
++          </p>
++        </div>
++        <div className="rounded-md bg-secondary/45 p-3">
++          <Target size={14} className="mb-2 text-primary" />
++          <p className="eyebrow">Trade chiusi</p>
++          <p className="mono mt-1 text-sm text-foreground">
++            {metrics.closedTrades}
++          </p>
++        </div>
++        <div className="rounded-md bg-secondary/45 p-3">
++          <TrendingDown size={14} className="mb-2 text-destructive" />
++          <p className="eyebrow">Max drawdown</p>
++          <p className="mono mt-1 text-sm text-foreground">
++            {number(metrics.maxDrawdownPct, "%")}
++          </p>
++        </div>
++      </div>
++    </section>
++  );
+ }
+ 
+ export function StrategyComparisonPage() {
+   const [snapshot, setSnapshot] = useState<Snapshot>(fallback);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string>();
+-  const [visibleRules, setVisibleRules] = useState<'berto' | 'five-brains'>('berto');
++  const [visibleRules, setVisibleRules] = useState<"berto" | "five-brains">(
++    "berto",
++  );
+ 
+   const load = async () => {
+     setLoading(true);
+     try {
+-      const response = await fetch('/api/strategy-comparison', { credentials: 'include' });
+-      if (!response.ok) throw new Error('Laboratorio strategie non disponibile.');
+-      setSnapshot(await response.json() as Snapshot);
++      const response = await fetch("/api/strategy-comparison", {
++        credentials: "include",
++      });
++      if (!response.ok)
++        throw new Error("Laboratorio strategie non disponibile.");
++      setSnapshot((await response.json()) as Snapshot);
+       setError(undefined);
+     } catch (value) {
+-      setError(value instanceof Error ? value.message : 'Errore caricamento confronto.');
++      setError(
++        value instanceof Error
++          ? value.message
++          : "Errore caricamento confronto.",
++      );
+     } finally {
+       setLoading(false);
+     }
+   };
+ 
+-  useEffect(() => { void load(); }, []);
++  useEffect(() => {
++    void load();
++  }, []);
+ 
+   const ai = snapshot.strategies.FIVE_BRAINS_STRATEGY;
+   const berto = snapshot.strategies.BERTO_GOLDEN_SETUP;
+   const rows: Array<[string, string, string]> = [
+-    ['Capitale iniziale', money(ai.initialCapital), money(berto.initialCapital)],
+-    ['Capitale finale', money(ai.finalCapital), money(berto.finalCapital)],
+-    ['Rendimento netto', number(ai.netReturnPct, '%'), number(berto.netReturnPct, '%')],
+-    ['Win rate', number(ai.winRatePct, '%'), number(berto.winRatePct, '%')],
+-    ['Profit factor', number(ai.profitFactor), number(berto.profitFactor)],
+-    ['Expectancy', number(ai.expectancyR, ' R'), number(berto.expectancyR, ' R')],
+-    ['Max drawdown', number(ai.maxDrawdownPct, '%'), number(berto.maxDrawdownPct, '%')],
+-    ['Trade chiusi', String(ai.closedTrades), String(berto.closedTrades)],
+-    ['Costi + slippage', money(ai.totalCosts), money(berto.totalCosts)],
++    [
++      "Capitale iniziale",
++      money(ai.initialCapital),
++      money(berto.initialCapital),
++    ],
++    ["Capitale finale", money(ai.finalCapital), money(berto.finalCapital)],
++    [
++      "Rendimento netto",
++      number(ai.netReturnPct, "%"),
++      number(berto.netReturnPct, "%"),
++    ],
++    ["Win rate", number(ai.winRatePct, "%"), number(berto.winRatePct, "%")],
++    ["Profit factor", number(ai.profitFactor), number(berto.profitFactor)],
++    [
++      "Expectancy",
++      number(ai.expectancyR, " R"),
++      number(berto.expectancyR, " R"),
++    ],
++    [
++      "Max drawdown",
++      number(ai.maxDrawdownPct, "%"),
++      number(berto.maxDrawdownPct, "%"),
++    ],
++    ["Trade chiusi", String(ai.closedTrades), String(berto.closedTrades)],
++    ["Costi + slippage", money(ai.totalCosts), money(berto.totalCosts)],
+   ];
+   const rules = snapshot.bertoRules;
+ 
+-  return <div className="content-wrap">
+-    <PageHeader
+-      eyebrow="STRATEGY COMPARISON LAB / SHADOW"
+-      title="5 Cervelli vs Berto"
+-      subtitle="Due strategie autonome, stesso capitale iniziale, stesso feed Axi e stesso periodo. Nessun segnale, veto o risultato passa da un motore all'altro."
+-      action={<button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Aggiorna</button>}
+-    />
+-
+-    {error && <div className="mb-4"><Notice tone="negative"><span>{error}</span></Notice></div>}
+-    {snapshot.persistence?.status === 'degraded' && <div className="mb-4"><Notice tone="negative"><span><strong>Registro confronto non disponibile.</strong> {snapshot.persistence.message}</span></Notice></div>}
+-    <Notice tone="teal"><span><strong>Separazione attiva.</strong> Portafogli, P&amp;L, drawdown, ordini virtuali e cronologie sono indipendenti. LIVE è disabilitato per entrambi.</span></Notice>
+-
+-    <div className="my-5 grid gap-4 lg:grid-cols-2">
+-      <StrategyCard
+-        title="5 Cervelli"
+-        subtitle="STRATEGIA A · LOGICA AI"
+-        status="SHADOW"
+-        tone="positive"
+-        metrics={ai}
+-        description="Motore tecnico, macro, fondamentale, statistico e Risk Brain con parametri propri. Non usa livelli o conferme Berto."
++  return (
++    <div className="content-wrap">
++      <PageHeader
++        eyebrow="STRATEGY COMPARISON LAB / SHADOW"
++        title="5 Cervelli vs Berto"
++        subtitle="Due strategie autonome, stesso capitale iniziale, stesso feed Axi e stesso periodo. Nessun segnale, veto o risultato passa da un motore all'altro."
++        action={
++          <button
++            onClick={() => void load()}
++            disabled={loading}
++            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground"
++          >
++            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
++            Aggiorna
++          </button>
++        }
+       />
+-      <StrategyCard
+-        title="Berto Golden Setup"
+-        subtitle="STRATEGIA B · REGOLE FISSE"
+-        status="REGOLE CARICATE"
+-        tone="amber"
+-        metrics={berto}
+-        description="Segnale QQQ e livelli US500 deterministici. Non riceve punteggi, pesi, conferme o veto dai cinque cervelli."
+-      />
+-    </div>
+ 
+-    <section className="mb-5 panel p-5 md:p-6">
+-      <SectionLabel aside={<Badge tone="neutral"><FlaskConical size={11} /> STESSA BASE</Badge>}>Confronto affiancato</SectionLabel>
+-      <div className="overflow-x-auto rounded-md border border-border">
+-        <table className="w-full min-w-[620px] text-left text-xs">
+-          <thead className="bg-secondary/45 text-muted-foreground"><tr><th className="px-4 py-3">Metrica</th><th className="px-4 py-3">5 Cervelli</th><th className="px-4 py-3">Berto</th></tr></thead>
+-          <tbody>{rows.map(([metric, left, right]) => <tr key={metric} className="border-t border-border"><td className="px-4 py-3 font-semibold text-foreground">{metric}</td><td className="px-4 py-3 mono">{left}</td><td className="px-4 py-3 mono">{right}</td></tr>)}</tbody>
+-        </table>
++      {error && (
++        <div className="mb-4">
++          <Notice tone="negative">
++            <span>{error}</span>
++          </Notice>
++        </div>
++      )}
++      {snapshot.persistence?.status === "degraded" && (
++        <div className="mb-4">
++          <Notice tone="negative">
++            <span>
++              <strong>Registro confronto non disponibile.</strong>{" "}
++              {snapshot.persistence.message}
++            </span>
++          </Notice>
++        </div>
++      )}
++      <Notice tone="teal">
++        <span>
++          <strong>Separazione attiva.</strong> Portafogli, P&amp;L, drawdown,
++          ordini virtuali e cronologie sono indipendenti. LIVE è disabilitato
++          per entrambi.
++        </span>
++      </Notice>
++
++      <div className="my-5 grid gap-4 lg:grid-cols-2">
++        <StrategyCard
++          title="5 Cervelli"
++          subtitle="STRATEGIA A · LOGICA AI"
++          status="SHADOW"
++          tone="positive"
++          metrics={ai}
++          description="Motore tecnico, macro, fondamentale, statistico e Risk Brain con parametri propri. Non usa livelli o conferme Berto."
++        />
++        <StrategyCard
++          title="Berto Breakout QQQ v4.50"
++          subtitle="STRATEGIA B · REGOLE FISSE"
++          status="REGOLE CARICATE"
++          tone="amber"
++          metrics={berto}
++          description="Segnale QQQ e livelli US500 deterministici. Non riceve punteggi, pesi, conferme o veto dai cinque cervelli."
++        />
+       </div>
+-      <p className="mt-3 text-xs text-muted-foreground">Nessun vincitore viene indicato prima di almeno {snapshot.minimumClosedTradesForReview} trade chiusi per strategia e di una verifica fuori campione.</p>
+-    </section>
+ 
+-    <section className="mb-5 panel p-5 md:p-6" aria-labelledby="rules-summary-title">
+-      <fieldset className="mb-5">
+-        <legend className="eyebrow mb-3">Riepilogo delle regole</legend>
+-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Strategia di cui leggere le regole">
+-          {([
+-            ['berto', 'REGOLE BERTO'],
+-            ['five-brains', 'REGOLE 5 CERVELLI'],
+-          ] as const).map(([value, label]) => (
+-            <label key={value} className="relative cursor-pointer">
+-              <input
+-                type="radio"
+-                name="visible-strategy-rules"
+-                value={value}
+-                checked={visibleRules === value}
+-                onChange={() => setVisibleRules(value)}
+-                aria-controls="strategy-rules-summary"
+-                className="peer sr-only"
+-              />
+-              <span className="flex min-h-11 items-center justify-center rounded-md border border-border bg-background/45 px-4 py-3 text-center text-xs font-bold tracking-wide text-muted-foreground transition hover:border-primary/60 hover:text-foreground peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
+-                {label}
+-              </span>
+-            </label>
+-          ))}
++      <section className="mb-5 panel p-5 md:p-6">
++        <SectionLabel
++          aside={
++            <Badge tone="neutral">
++              <FlaskConical size={11} /> STESSA BASE
++            </Badge>
++          }
++        >
++          Confronto affiancato
++        </SectionLabel>
++        <div className="overflow-x-auto rounded-md border border-border">
++          <table className="w-full min-w-[620px] text-left text-xs">
++            <thead className="bg-secondary/45 text-muted-foreground">
++              <tr>
++                <th className="px-4 py-3">Metrica</th>
++                <th className="px-4 py-3">5 Cervelli</th>
++                <th className="px-4 py-3">Berto</th>
++              </tr>
++            </thead>
++            <tbody>
++              {rows.map(([metric, left, right]) => (
++                <tr key={metric} className="border-t border-border">
++                  <td className="px-4 py-3 font-semibold text-foreground">
++                    {metric}
++                  </td>
++                  <td className="px-4 py-3 mono">{left}</td>
++                  <td className="px-4 py-3 mono">{right}</td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
+         </div>
+-        <p className="mt-2 text-xs text-muted-foreground">La scelta cambia solo questo riepilogo; risultati e modalità operative restano invariati.</p>
+-      </fieldset>
+-      <div id="strategy-rules-summary" aria-live="polite">
+-        {visibleRules === 'berto' ? <>
+-          <div id="rules-summary-title"><SectionLabel aside={<Badge tone="amber">V1.0 · BLOCCATA</Badge>}>Regole Berto implementate</SectionLabel></div>
+-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+-            <Rule icon={<TrendingUp size={15} />} title="Filtro QQQ" text="Opera solo se la candela regolare precedente è verde. Suffissi dai centesimi di Low e High." />
+-            <Rule icon={<ArrowRightLeft size={15} />} title="Anti-clustering" text={`Distanza circolare < ${rules.suffixClusterDistance}: conserva soltanto il suffisso numericamente più basso.`} />
+-            <Rule icon={<Target size={15} />} title="Livelli US500" text={`Solo livelli sotto l'open, griglia 100 pt, distanza minima ${rules.minimumDistancePoints} pt. Solo LONG.`} />
+-            <Rule icon={<Clock3 size={15} />} title="Sessione New York" text={`${rules.sessionOpen}–09:59: tocchi invalidati. Entry da ${rules.entryWindowStart}. Chiusura ${rules.forcedExit}.`} />
+-            <Rule icon={<ShieldCheck size={15} />} title="Primo tocco" text="Un livello può entrare una sola volta. Se toccato prima della finestra operativa resta escluso per tutta la giornata." />
+-            <Rule icon={<TrendingDown size={15} />} title="Stop loss" text={`Entry − ${rules.stopLossPoints} punti, inclusivo del punto previsto per spread/slippage.`} />
+-            <Rule icon={<TrendingUp size={15} />} title="Take profit" text={`Entry + ${rules.takeProfitPoints} punti. Nessun trailing o modifica da parte dell'AI.`} />
+-            <Rule icon={<WalletCards size={15} />} title="Due letture rischio" text={`Originale Berto ${rules.originalRiskPerTradePct}%; confronto normalizzato ${rules.normalizedComparisonRiskPct}% per isolare la qualità dei segnali.`} />
++        <p className="mt-3 text-xs text-muted-foreground">
++          Nessun vincitore viene indicato prima di almeno{" "}
++          {snapshot.minimumClosedTradesForReview} trade chiusi per strategia e
++          di una verifica fuori campione.
++        </p>
++      </section>
++
++      <section
++        className="mb-5 panel p-5 md:p-6"
++        aria-labelledby="rules-summary-title"
++      >
++        <fieldset className="mb-5">
++          <legend className="eyebrow mb-3">Riepilogo delle regole</legend>
++          <div
++            className="grid grid-cols-1 gap-2 sm:grid-cols-2"
++            aria-label="Strategia di cui leggere le regole"
++          >
++            {(
++              [
++                ["berto", "REGOLE BERTO"],
++                ["five-brains", "REGOLE 5 CERVELLI"],
++              ] as const
++            ).map(([value, label]) => (
++              <label key={value} className="relative cursor-pointer">
++                <input
++                  type="radio"
++                  name="visible-strategy-rules"
++                  value={value}
++                  checked={visibleRules === value}
++                  onChange={() => setVisibleRules(value)}
++                  aria-controls="strategy-rules-summary"
++                  className="peer sr-only"
++                />
++                <span className="flex min-h-11 items-center justify-center rounded-md border border-border bg-background/45 px-4 py-3 text-center text-xs font-bold tracking-wide text-muted-foreground transition hover:border-primary/60 hover:text-foreground peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
++                  {label}
++                </span>
++              </label>
++            ))}
+           </div>
+-        </> : <>
+-          <div id="rules-summary-title"><SectionLabel aside={<Badge tone="teal">SOLO INFORMATIVO</Badge>}>Regole 5 Cervelli</SectionLabel></div>
+-          <p className="mb-4 text-xs leading-relaxed text-muted-foreground">Il motore riceve segnali tecnici e macro/news con punteggio e confidenza; valuta separatamente i dati fondamentali e statistici quando disponibili. Questo riepilogo non invia segnali né cambia le regole.</p>
+-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+-            <Rule icon={<TrendingUp size={15} />} title="ANALISI TECNICA" text="Considera il segnale tecnico disponibile su struttura del prezzo, trend, momentum e volatilità. Le conferme multi-timeframe dipendono dai dati del segnale; il Master Decision Engine ne riceve punteggio e confidenza, senza ricalcolare gli indicatori." />
+-            <Rule icon={<WalletCards size={15} />} title="ANALISI FONDAMENTALE" text="Valuta prezzo, utili, crescita, margini, redditività e debito quando presenti. Le metriche assenti non vengono inventate: quelle disponibili sono normalizzate e la copertura determina la confidenza." />
+-            <Rule icon={<Clock3 size={15} />} title="MACRO" text="Il motore usa il segnale aggregato macro/news; eventi ad alto impatto imminenti riducono la size. Shock sistemici e condizioni estreme di volatilità possono attivare i guardrail di sicurezza." />
+-            <Rule icon={<CheckCircle2 size={15} />} title="NEWS" text="Il flusso di verifica considera fonti autorizzate, date e corrispondenze dirette tra notizie. Dati mancanti o degradati, duplicati e notizie in conflitto non sono presentati come conferme certe; al motore arriva il segnale macro/news aggregato." />
+-            <Rule icon={<ShieldCheck size={15} />} title="RISCHIO" text="Controlla perdita giornaliera, drawdown, qualità del feed, connessione broker, spread, slippage e volatilità. Correlazione elevata e Risk Brain riducono la size; i limiti condivisi di rischio per trade, esposizione e numero di posizioni sono verificati nel controllo delle modalità." />
++          <p className="mt-2 text-xs text-muted-foreground">
++            La scelta cambia solo questo riepilogo; risultati e modalità
++            operative restano invariati.
++          </p>
++        </fieldset>
++        <div id="strategy-rules-summary" aria-live="polite">
++          {visibleRules === "berto" ? (
++            <>
++              <div id="rules-summary-title">
++                <SectionLabel
++                  aside={<Badge tone="amber">V{rules.version} · SHADOW</Badge>}
++                >
++                  Regole Berto implementate
++                </SectionLabel>
++              </div>
++              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
++                <Rule
++                  icon={<TrendingUp size={15} />}
++                  title="Direzione QQQ"
++                  text="Candela precedente verde: solo LONG. Rossa: solo SHORT. Doji: nessun trade. Suffissi dai centesimi di Low e High."
++                />
++                <Rule
++                  icon={<ArrowRightLeft size={15} />}
++                  title="Anti-clustering"
++                  text={`Distanza circolare < ${rules.suffixClusterDistance}: suffisso più basso nei LONG, più alto negli SHORT.`}
++                />
++                <Rule
++                  icon={<Target size={15} />}
++                  title="Livelli e breakout"
++                  text={`Griglia US500 ogni 100 pt, entro ±${rules.maximumDistanceFromOpenPoints} dall'open. Dopo il primo tocco, ingresso a ±${rules.breakoutPoints}.`}
++                />
++                <Rule
++                  icon={<Clock3 size={15} />}
++                  title="Sessione New York"
++                  text={`Da ${rules.sessionOpen}; primo minuto scartato. Chiusura ${rules.regularForcedExit}, oppure ${rules.halfDayForcedExit} nelle mezze giornate.`}
++                />
++                <Rule
++                  icon={<ShieldCheck size={15} />}
++                  title="Filtri ingresso"
++                  text={`Range precedente < ${rules.maximumPreviousRangePct}%. Spread ≤ ${rules.maximumSpreadPoints} pt e inseguimento massimo ${rules.maximumChasePoints} pt.`}
++                />
++                <Rule
++                  icon={<TrendingDown size={15} />}
++                  title="Stop iniziale"
++                  text={`${rules.initialStopPoints} punti dall'ingresso. Un solo trade per livello e nessuna posizione overnight.`}
++                />
++                <Rule
++                  icon={<TrendingUp size={15} />}
++                  title="Trailing M1"
++                  text={`Nessun TP fisso. Trailing ${rules.trailingDistancePoints} pt sulle candele M1 chiuse, attivo oltre +${rules.trailingActivationFromLevelPoints} pt dal livello.`}
++                />
++                <Rule
++                  icon={<WalletCards size={15} />}
++                  title="Rischio autonomo"
++                  text={`${rules.riskPerTradePct}% del saldo Berto per trade; partenza prudente indicata ${rules.prudentStartingRiskPct}%. Size indipendente dai 5 Cervelli.`}
++                />
++              </div>
++            </>
++          ) : (
++            <>
++              <div id="rules-summary-title">
++                <SectionLabel
++                  aside={<Badge tone="teal">SOLO INFORMATIVO</Badge>}
++                >
++                  Regole 5 Cervelli
++                </SectionLabel>
++              </div>
++              <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
++                Il motore riceve segnali tecnici e macro/news con punteggio e
++                confidenza; valuta separatamente i dati fondamentali e
++                statistici quando disponibili. Questo riepilogo non invia
++                segnali né cambia le regole.
++              </p>
++              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
++                <Rule
++                  icon={<TrendingUp size={15} />}
++                  title="ANALISI TECNICA"
++                  text="Considera il segnale tecnico disponibile su struttura del prezzo, trend, momentum e volatilità. Le conferme multi-timeframe dipendono dai dati del segnale; il Master Decision Engine ne riceve punteggio e confidenza, senza ricalcolare gli indicatori."
++                />
++                <Rule
++                  icon={<WalletCards size={15} />}
++                  title="ANALISI FONDAMENTALE"
++                  text="Valuta prezzo, utili, crescita, margini, redditività e debito quando presenti. Le metriche assenti non vengono inventate: quelle disponibili sono normalizzate e la copertura determina la confidenza."
++                />
++                <Rule
++                  icon={<Clock3 size={15} />}
++                  title="MACRO"
++                  text="Il motore usa il segnale aggregato macro/news; eventi ad alto impatto imminenti riducono la size. Shock sistemici e condizioni estreme di volatilità possono attivare i guardrail di sicurezza."
++                />
++                <Rule
++                  icon={<CheckCircle2 size={15} />}
++                  title="NEWS"
++                  text="Il flusso di verifica considera fonti autorizzate, date e corrispondenze dirette tra notizie. Dati mancanti o degradati, duplicati e notizie in conflitto non sono presentati come conferme certe; al motore arriva il segnale macro/news aggregato."
++                />
++                <Rule
++                  icon={<ShieldCheck size={15} />}
++                  title="RISCHIO"
++                  text="Controlla perdita giornaliera, drawdown, qualità del feed, connessione broker, spread, slippage e volatilità. Correlazione elevata e Risk Brain riducono la size; i limiti condivisi di rischio per trade, esposizione e numero di posizioni sono verificati nel controllo delle modalità."
++                />
++              </div>
++              <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
++                <h3 className="display mb-2 text-base font-bold text-foreground">
++                  Come nasce la decisione
++                </h3>
++                <p className="text-xs leading-relaxed text-muted-foreground">
++                  Le analisi restano separate: il Master Decision Engine combina
++                  i punteggi disponibili di tecnica, macro/news, fondamentale e
++                  statistica con pesi diversi per orizzonte. Se un segnale
++                  opzionale manca, rinormalizza i pesi degli altri invece di
++                  bloccare automaticamente l’operazione. I guardrail di rischio
++                  possono ridurre punteggio e size oppure imporre NO_TRADE;
++                  senza punteggi disponibili la decisione è WAIT. Il contesto
++                  istituzionale resta SHADOW e non influisce sulla decisione.
++                  Operatività solo PAPER/SHADOW: LIVE disabilitato.
++                </p>
++              </div>
++            </>
++          )}
++        </div>
++      </section>
++
++      <section className="grid gap-4 lg:grid-cols-2">
++        <div className="rounded-xl border border-border bg-card/60 p-5">
++          <div className="mb-4 flex items-center gap-2">
++            <Bot size={17} className="text-primary" />
++            <h3 className="display text-lg font-bold">
++              Isolamento decisionale
++            </h3>
+           </div>
+-          <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
+-            <h3 className="display mb-2 text-base font-bold text-foreground">Come nasce la decisione</h3>
+-            <p className="text-xs leading-relaxed text-muted-foreground">Le analisi restano separate: il Master Decision Engine combina i punteggi disponibili di tecnica, macro/news, fondamentale e statistica con pesi diversi per orizzonte. Se un segnale opzionale manca, rinormalizza i pesi degli altri invece di bloccare automaticamente l’operazione. I guardrail di rischio possono ridurre punteggio e size oppure imporre NO_TRADE; senza punteggi disponibili la decisione è WAIT. Il contesto istituzionale resta SHADOW e non influisce sulla decisione. Operatività solo PAPER/SHADOW: LIVE disabilitato.</p>
++          <Check text="I cinque cervelli non vedono livelli, trade o risultati Berto." />
++          <Check text="Berto non usa punteggi, confidenza, pesi o Risk Brain AI." />
++          <Check text="I portafogli virtuali partono dallo stesso capitale." />
++          <Check text="Ogni operazione conserva strategyId, costi e slippage propri." />
++        </div>
++        <div className="rounded-xl border border-border bg-card/60 p-5">
++          <div className="mb-4 flex items-center gap-2">
++            <ShieldCheck size={17} className="text-accent" />
++            <h3 className="display text-lg font-bold">Barriere operative</h3>
+           </div>
+-        </>}
+-      </div>
+-    </section>
+-
+-    <section className="grid gap-4 lg:grid-cols-2">
+-      <div className="rounded-xl border border-border bg-card/60 p-5">
+-        <div className="mb-4 flex items-center gap-2"><Bot size={17} className="text-primary" /><h3 className="display text-lg font-bold">Isolamento decisionale</h3></div>
+-        <Check text="I cinque cervelli non vedono livelli, trade o risultati Berto." />
+-        <Check text="Berto non usa punteggi, confidenza, pesi o Risk Brain AI." />
+-        <Check text="I portafogli virtuali partono dallo stesso capitale." />
+-        <Check text="Ogni operazione conserva strategyId, costi e slippage propri." />
+-      </div>
+-      <div className="rounded-xl border border-border bg-card/60 p-5">
+-        <div className="mb-4 flex items-center gap-2"><ShieldCheck size={17} className="text-accent" /><h3 className="display text-lg font-bold">Barriere operative</h3></div>
+-        <Check text="Modalità SHADOW e executionEnabled=false hardcoded." />
+-        <Check text="Nessuna posizione overnight: uscita temporale obbligatoria." />
+-        <Check text="Il confronto osserva i risultati ma non seleziona automaticamente il LIVE." />
+-        <Check text="Dati insufficienti restano indicati come tali, senza valori inventati." />
+-      </div>
+-    </section>
+-  </div>;
++          <Check text="Modalità SHADOW e executionEnabled=false hardcoded." />
++          <Check text="Nessuna posizione overnight: uscita temporale obbligatoria." />
++          <Check text="Il confronto osserva i risultati ma non seleziona automaticamente il LIVE." />
++          <Check text="Dati insufficienti restano indicati come tali, senza valori inventati." />
++        </div>
++      </section>
++    </div>
++  );
+ }
+ 
+-function Rule({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+-  return <div className="rounded-lg border border-border bg-background/35 p-4"><div className="mb-2 flex items-center gap-2 text-primary">{icon}<strong className="text-xs text-foreground">{title}</strong></div><p className="text-[11px] leading-relaxed text-muted-foreground">{text}</p></div>;
++function Rule({
++  icon,
++  title,
++  text,
++}: {
++  icon: ReactNode;
++  title: string;
++  text: string;
++}) {
++  return (
++    <div className="rounded-lg border border-border bg-background/35 p-4">
++      <div className="mb-2 flex items-center gap-2 text-primary">
++        {icon}
++        <strong className="text-xs text-foreground">{title}</strong>
++      </div>
++      <p className="text-[11px] leading-relaxed text-muted-foreground">
++        {text}
++      </p>
++    </div>
++  );
+ }
+ 
+ function Check({ text }: { text: string }) {
+-  return <div className="mb-2 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-accent" /><span>{text}</span></div>;
++  return (
++    <div className="mb-2 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
++      <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-accent" />
++      <span>{text}</span>
++    </div>
++  );
+ }
+diff --git a/docs/STRATEGY-COMPARISON-LAB.md b/docs/STRATEGY-COMPARISON-LAB.md
+index 7849b2b..2e6aabc 100644
+--- a/docs/STRATEGY-COMPARISON-LAB.md
++++ b/docs/STRATEGY-COMPARISON-LAB.md
+@@ -19,30 +19,28 @@ Feed Axi normalizzato
+ metriche A + metriche B ─> dashboard di osservazione (nessun feedback ai motori)
+ ```
+ 
+-## Berto Golden Setup 1.0.0
+-
+-- Segnale: candela regolare QQQ del giorno precedente.
+-- Se `close <= open`: giornata sospesa.
+-- Suffissi: centesimi del Low e dell'High.
+-- Distanza circolare: `min(abs(A-B), 100-abs(A-B))`.
+-- Se distanza < 10: conserva il suffisso numericamente inferiore.
+-- Livelli: suffissi proiettati sulla griglia US500 ogni 100 punti.
+-- Solo livelli sotto il Session Open e distanti almeno 20 punti.
+-- Fuso canonico: `America/New_York`.
+-- 09:30–09:59 ET: ogni primo tocco invalida il livello per la giornata.
+-- Da 10:00 ET: primo tocco valido, solo LONG.
+-- Stop loss: 31 punti.
+-- Take profit: 89 punti.
+-- Alle 15:55 ET: chiusura di posizioni e scadenza degli ordini.
+-- Overnight vietato.
+-- Rischio originale osservato: 5% per trade.
+-- Confronto normalizzato: 0,5% per trade.
++## Berto Breakout QQQ 4.50.0
++
++- Segnale: candela QQQ del giorno di borsa precedente; verde = LONG, rossa = SHORT, doji = nessun trade.
++- Suffissi: centesimi del Low e dell'High, con distanza circolare `min(abs(A-B), 100-abs(A-B))`.
++- Se la distanza è < 10: conserva il suffisso inferiore nei LONG e quello superiore negli SHORT.
++- Livelli: griglia US500 ogni 100 punti, soltanto entro 50 punti dal Session Open.
++- Filtro volatilità fail-closed: range completo della precedente sessione USA < 1,3% della chiusura.
++- Fuso canonico: `America/New_York`; 09:30 ET–15:55 ET, oppure 12:55 ET nelle mezze giornate.
++- Il tocco nella candela M1 delle 09:30 scarta il livello; i tocchi successivi devono arrivare dal lato coerente con la direzione QQQ.
++- Ingresso stop a 8 punti dal livello; inseguimento massimo 2 punti e spread massimo 2 punti.
++- Stop iniziale: 13 punti dall'ingresso. Nessun take profit fisso.
++- Trailing sulle candele M1 chiuse: 25 punti dal massimo/minimo; si attiva oltre 20 punti dal livello e migliora di almeno 0,2 punti.
++- Un trade per livello; chiusura forzata e cancellazione dei setup a fine sessione; overnight vietato.
++- Size autonoma: 2% del saldo Berto per trade, con 1% indicato come partenza prudente e massimo 50 lotti.
++- Dopo una riconnessione l'adapter attende 90 secondi, ricostruisce la giornata e non insegue breakout già avvenuti.
++- Festività e mezze giornate sono input di sessione versionati: in assenza di calendario valido il sistema deve bloccarsi.
+ - Modalità: SHADOW; esecuzione reale impossibile.
+ 
+ ## API
+ 
+ - `GET /api/strategy-comparison`: contratto del laboratorio, capitale comune e metriche.
+-- `POST /api/strategy-comparison/berto/plan`: calcola il piano giornaliero Berto da OHLC QQQ e Session Open US500.
++- `POST /api/strategy-comparison/berto/plan`: calcola il piano giornaliero da OHLC QQQ, Session Open US500, range USA precedente e tipo di sessione.
+ 
+ Esempio body:
+ 
+@@ -50,7 +48,14 @@ Esempio body:
+ {
+   "qqq": { "open": 724, "high": 737.62, "low": 724.18, "close": 735 },
+   "sp500SessionOpen": 7529.55,
+-  "depth": 8
++  "previousSession": {
++    "high": 5020,
++    "low": 4980,
++    "close": 5000,
++    "complete": true
++  },
++  "sessionKind": "REGULAR",
++  "depth": 10
+ }
+ ```
+ 
+-- 
+2.51.1
+
