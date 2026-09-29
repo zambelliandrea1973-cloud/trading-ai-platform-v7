@@ -1,0 +1,213 @@
+TASK FINALE — MT5 M1 + integrazione BERTO definitiva
+
+Sei autorizzato a completare l'implementazione necessaria per rendere operativa la nuova strategia BERTO in modalità SHADOW/PAPER, partendo dallo stato attuale del progetto.
+
+Non eseguire ulteriori analisi generali già effettuate. Procedi direttamente per fasi, fermandoti solo se incontri un'informazione tecnica che non può essere determinata dal codice o dal bridge MT5 esistente senza inventare un comportamento.
+
+FASE 1 — Estensione read-only del bridge MT5
+
+Estendi il bridge MT5 esistente aggiungendo la capacità read-only di richiedere rates/candele native MT5.
+
+Aggiungi al contratto BrokerAdapter il metodo minimo necessario, concettualmente equivalente a:
+
+getRates(symbol, timeframe, from/to oppure count)
+
+Per BERTO deve supportare almeno:
+
+timeframe = M1
+
+e restituire almeno:
+
+timestamp
+open
+high
+low
+close
+
+Se MT5 restituisce anche tick volume, spread o real volume, possono essere preservati come metadati ma non inventare valori mancanti.
+
+Il dato deve provenire dalle rates native MT5. Non costruire OHLC aggregando getQuotes().
+
+Mantieni getQuotes() esistente per:
+
+bid
+ask
+timestamp
+
+Non modificare il comportamento attuale di getQuotes() e getHistory().
+
+FASE 2 — Simbolo US500
+
+BERTO deve utilizzare lo strumento S&P 500 disponibile sull'account MT5.
+
+Non hardcodare arbitrariamente US500.
+
+Risolvi il simbolo attraverso il meccanismo/configurazione già presente per l'account corrente. Sono possibili denominazioni broker differenti (US500, SPX500, ecc.).
+
+Se l'account non permette di identificare in maniera deterministica lo strumento S&P500, fail closed e restituisci un errore esplicito.
+
+Non scegliere automaticamente un simbolo ambiguo.
+
+FASE 3 — Isolamento
+
+getRates() deve utilizzare lo stesso account context e gli stessi meccanismi di isolamento dell'adapter MT5 esistente.
+
+Nessun utente/account deve poter accedere:
+
+alle credenziali di altri account;
+alla connessione MT5 di altri account;
+al mapping simboli privato di altri account.
+
+Non introdurre stato globale condiviso per connessioni o mapping.
+
+FASE 4 — Timeframe e timestamp
+
+Preserva il timestamp originale delle rates MT5 e documenta chiaramente se è UTC, broker time o altro formato fornito dal bridge.
+
+Non trasformare gli orari BERTO nel bridge.
+
+La conversione e le regole di sessione devono rimanere responsabilità di bertoGoldenSetup.ts.
+
+BERTO deve continuare a utilizzare:
+
+timezone America/New_York;
+sessione 09:30–15:55;
+DST automatico;
+festività USA;
+early close 12:55;
+SL = 13;
+TP = 22 dall'ingresso;
+MaxDist = 50.
+
+Non reintrodurre alcuna vecchia regola BERTO.
+
+In particolare NON devono tornare:
+
+overshoot/retest 4–8;
+breakout 13–15;
+vecchie euristiche presenti in bertoStrategyEngine.ts.
+FASE 5 — Alimentazione QQQ
+
+Mantieni la sorgente QQQ prevista dalle specifiche:
+
+https://www.investing.com/etfs/powershares-qqqq
+
+Non sostituirla con un'altra sorgente e non modificare i valori.
+
+BERTO necessita della candela QQQ del precedente giorno di negoziazione secondo la logica definitiva già implementata.
+
+Se nel progetto non esiste ancora un'acquisizione automatica tecnicamente valida di questi dati, non inventare scraping o API.
+
+In quel caso mantieni l'interfaccia di ingresso QQQ già prevista da bertoGoldenSetup.ts e segnala esattamente quale dato deve essere fornito al runtime.
+
+La mancanza di automazione Investing non autorizza a cambiare provider.
+
+FASE 6 — Collegamento della nuova BERTO
+
+Usa esclusivamente:
+
+bertoGoldenSetup.ts
+
+come motore BERTO definitivo.
+
+Il percorso deve diventare:
+
+QQQ precedente → createBertoDailyPlan → US500 M1 MT5 → valutazione primo contatto → ordine STOP SHADOW → eventuale fill → SL/TP/session close → risultato SHADOW
+
+Bid/Ask devono provenire dall'interfaccia broker già disponibile quando richiesti dalla semantica della simulazione.
+
+La strategia deve restare:
+
+executionEnabled = false
+
+decisionInfluence = false
+
+e non deve poter raggiungere funzioni di invio ordine LIVE.
+
+FASE 7 — Eliminazione vecchia BERTO
+
+Dopo che la nuova BERTO è collegata correttamente, rimuovi bertoStrategyEngine.ts solo se hai verificato nuovamente che non abbia chiamanti necessari.
+
+Elimina/rimuovi dai test le aspettative appartenenti esclusivamente alle vecchie regole 4–8 / 13–15.
+
+Aggiorna eventuali riferimenti documentali obsoleti.
+
+Deve esistere un solo motore BERTO.
+
+Non eliminare componenti condivisi con altre strategie.
+
+FASE 8 — Comparator e dashboard
+
+Collega BERTO al comparator/metriche solo attraverso risultati SHADOW effettivamente prodotti dalla nuova strategia.
+
+Non inventare performance.
+
+Non convertire automaticamente valori statici della dashboard in risultati reali se non esiste ancora uno storico BERTO effettivo.
+
+Se il collegamento alle metriche richiede persistenza/database non già prevista, lascialo separato e segnalalo: nessuna migrazione DB è autorizzata in questo task.
+
+FASE 9 — Protezioni
+
+Non modificare:
+
+altre strategie;
+Risk Brain;
+logiche SCALP/INTRADAY/SWING;
+broker execution LIVE;
+credenziali;
+schema DB;
+migrazioni;
+configurazioni LIVE.
+
+Non eseguire database push.
+
+FASE 10 — Test finale
+
+Terminata l'implementazione esegui una sola sequenza finale:
+
+typecheck completo;
+test BERTO;
+test API standard;
+test isolamento account/feed;
+verifica rates US500 M1;
+verifica Bid/Ask;
+verifica calendario New York/DST/festività/early close;
+verifica SL13/TP22/MaxDist50;
+verifica che le vecchie regole BERTO non siano più operative;
+verifica che BERTO non possa inviare ordini LIVE;
+build completa.
+
+Escludi test PostgreSQL che scrivono sul database.
+
+Non correggere automaticamente problemi estranei a questo task.
+
+Se fallisce qualcosa di estraneo a BERTO/bridge MT5, riportalo separatamente.
+
+FASE 11 — STOP prima della pubblicazione
+
+Se tutti i controlli pertinenti sono PASS, fermati prima di:
+
+merge;
+push finale verso main;
+Republish.
+
+Mostrami un unico rapporto finale contenente:
+
+file ADD/MODIFY/REMOVE;
+implementazione getRates();
+sorgente effettiva delle M1;
+simbolo S&P500 utilizzato e metodo di risoluzione;
+timezone timestamp;
+disponibilità dello storico M1;
+percorso runtime completo BERTO;
+stato sorgente QQQ Investing;
+numero test superati/falliti;
+risultato typecheck;
+risultato build;
+conferma executionEnabled=false;
+conferma decisionInfluence=false;
+conferma nessun ordine LIVE possibile;
+conferma nessuna modifica DB/migrazione;
+commit/diff esatto pronto per l'integrazione.
+
+Non eseguire Republish finché non approvo il rapporto finale.

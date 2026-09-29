@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowRightLeft,
   Bot,
@@ -11,8 +11,8 @@ import {
   TrendingDown,
   TrendingUp,
   WalletCards,
-} from 'lucide-react';
-import { Badge, Notice, PageHeader, SectionLabel } from '@/components/common';
+} from "lucide-react";
+import { Badge, Notice, PageHeader, SectionLabel } from "@/components/common";
 
 type Metrics = {
   initialCapital: number;
@@ -30,24 +30,30 @@ type Metrics = {
 };
 
 type BertoRules = {
+  version: string;
   signalSymbol: string;
   executionSymbol: string;
   timezone: string;
   sessionOpen: string;
-  entryWindowStart: string;
-  forcedExit: string;
-  minimumDistancePoints: number;
+  regularForcedExit: string;
+  halfDayForcedExit: string;
+  breakoutPoints: number;
+  initialStopPoints: number;
+  trailingDistancePoints: number;
+  trailingActivationFromLevelPoints: number;
+  maximumDistanceFromOpenPoints: number;
+  maximumPreviousRangePct: number;
+  maximumChasePoints: number;
+  maximumSpreadPoints: number;
   suffixClusterDistance: number;
-  stopLossPoints: number;
-  takeProfitPoints: number;
-  originalRiskPerTradePct: number;
-  normalizedComparisonRiskPct: number;
+  riskPerTradePct: number;
+  prudentStartingRiskPct: number;
   executionEnabled: false;
-  mode: 'SHADOW';
+  mode: "SHADOW";
 };
 
 type Snapshot = {
-  mode: 'SHADOW';
+  mode: "SHADOW";
   executionEnabled: false;
   sharedMarketData: true;
   isolatedPortfolios: true;
@@ -58,9 +64,9 @@ type Snapshot = {
     BERTO_GOLDEN_SETUP: Metrics;
   };
   bertoRules: BertoRules;
-  verdict: 'INSUFFICIENT_DATA';
+  verdict: "INSUFFICIENT_DATA";
   minimumClosedTradesForReview: number;
-  persistence?: { status: 'healthy' | 'degraded'; message?: string };
+  persistence?: { status: "healthy" | "degraded"; message?: string };
 };
 
 const emptyMetrics = (capital = 5_000): Metrics => ({
@@ -79,7 +85,7 @@ const emptyMetrics = (capital = 5_000): Metrics => ({
 });
 
 const fallback: Snapshot = {
-  mode: 'SHADOW',
+  mode: "SHADOW",
   executionEnabled: false,
   sharedMarketData: true,
   isolatedPortfolios: true,
@@ -90,34 +96,46 @@ const fallback: Snapshot = {
     BERTO_GOLDEN_SETUP: emptyMetrics(),
   },
   bertoRules: {
-    signalSymbol: 'QQQ',
-    executionSymbol: 'US500',
-    timezone: 'America/New_York',
-    sessionOpen: '09:30',
-    entryWindowStart: '10:00',
-    forcedExit: '15:55',
-    minimumDistancePoints: 20,
+    version: "4.50.0",
+    signalSymbol: "QQQ",
+    executionSymbol: "US500",
+    timezone: "America/New_York",
+    sessionOpen: "09:30",
+    regularForcedExit: "15:55",
+    halfDayForcedExit: "12:55",
+    breakoutPoints: 8,
+    initialStopPoints: 13,
+    trailingDistancePoints: 25,
+    trailingActivationFromLevelPoints: 20,
+    maximumDistanceFromOpenPoints: 50,
+    maximumPreviousRangePct: 1.3,
+    maximumChasePoints: 2,
+    maximumSpreadPoints: 2,
     suffixClusterDistance: 10,
-    stopLossPoints: 31,
-    takeProfitPoints: 89,
-    originalRiskPerTradePct: 5,
-    normalizedComparisonRiskPct: 0.5,
+    riskPerTradePct: 2,
+    prudentStartingRiskPct: 1,
     executionEnabled: false,
-    mode: 'SHADOW',
+    mode: "SHADOW",
   },
-  verdict: 'INSUFFICIENT_DATA',
+  verdict: "INSUFFICIENT_DATA",
   minimumClosedTradesForReview: 100,
-  persistence: { status: 'degraded', message: 'Dati persistenti non ancora caricati.' },
+  persistence: {
+    status: "degraded",
+    message: "Dati persistenti non ancora caricati.",
+  },
 };
 
-const money = (value: number) => new Intl.NumberFormat('it-IT', {
-  style: 'currency',
-  currency: 'EUR',
-  maximumFractionDigits: 2,
-}).format(value);
+const money = (value: number) =>
+  new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 2,
+  }).format(value);
 
-const number = (value: number | null, suffix = '') =>
-  value === null ? '—' : `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(value)}${suffix}`;
+const number = (value: number | null, suffix = "") =>
+  value === null
+    ? "—"
+    : `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(value)}${suffix}`;
 
 function StrategyCard({
   title,
@@ -130,184 +148,431 @@ function StrategyCard({
   title: string;
   subtitle: string;
   status: string;
-  tone: 'positive' | 'amber';
+  tone: "positive" | "amber";
   metrics: Metrics;
   description: ReactNode;
 }) {
-  return <section className="rounded-xl border border-border bg-card/70 p-5">
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div><p className="eyebrow mb-2">{subtitle}</p><h2 className="display text-2xl font-bold text-foreground">{title}</h2></div>
-      <Badge tone={tone}>{status}</Badge>
-    </div>
-    <p className="mb-4 text-xs leading-relaxed text-muted-foreground">{description}</p>
-    <div className="grid grid-cols-2 gap-2">
-      <div className="rounded-md bg-secondary/45 p-3"><WalletCards size={14} className="mb-2 text-primary" /><p className="eyebrow">Capitale virtuale</p><p className="mono mt-1 text-sm text-foreground">{money(metrics.finalCapital)}</p></div>
-      <div className="rounded-md bg-secondary/45 p-3"><TrendingUp size={14} className="mb-2 text-accent" /><p className="eyebrow">Rendimento netto</p><p className="mono mt-1 text-sm text-foreground">{number(metrics.netReturnPct, '%')}</p></div>
-      <div className="rounded-md bg-secondary/45 p-3"><Target size={14} className="mb-2 text-primary" /><p className="eyebrow">Trade chiusi</p><p className="mono mt-1 text-sm text-foreground">{metrics.closedTrades}</p></div>
-      <div className="rounded-md bg-secondary/45 p-3"><TrendingDown size={14} className="mb-2 text-destructive" /><p className="eyebrow">Max drawdown</p><p className="mono mt-1 text-sm text-foreground">{number(metrics.maxDrawdownPct, '%')}</p></div>
-    </div>
-  </section>;
+  return (
+    <section className="rounded-xl border border-border bg-card/70 p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow mb-2">{subtitle}</p>
+          <h2 className="display text-2xl font-bold text-foreground">
+            {title}
+          </h2>
+        </div>
+        <Badge tone={tone}>{status}</Badge>
+      </div>
+      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+        {description}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-md bg-secondary/45 p-3">
+          <WalletCards size={14} className="mb-2 text-primary" />
+          <p className="eyebrow">Capitale virtuale</p>
+          <p className="mono mt-1 text-sm text-foreground">
+            {money(metrics.finalCapital)}
+          </p>
+        </div>
+        <div className="rounded-md bg-secondary/45 p-3">
+          <TrendingUp size={14} className="mb-2 text-accent" />
+          <p className="eyebrow">Rendimento netto</p>
+          <p className="mono mt-1 text-sm text-foreground">
+            {number(metrics.netReturnPct, "%")}
+          </p>
+        </div>
+        <div className="rounded-md bg-secondary/45 p-3">
+          <Target size={14} className="mb-2 text-primary" />
+          <p className="eyebrow">Trade chiusi</p>
+          <p className="mono mt-1 text-sm text-foreground">
+            {metrics.closedTrades}
+          </p>
+        </div>
+        <div className="rounded-md bg-secondary/45 p-3">
+          <TrendingDown size={14} className="mb-2 text-destructive" />
+          <p className="eyebrow">Max drawdown</p>
+          <p className="mono mt-1 text-sm text-foreground">
+            {number(metrics.maxDrawdownPct, "%")}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function StrategyComparisonPage() {
   const [snapshot, setSnapshot] = useState<Snapshot>(fallback);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [visibleRules, setVisibleRules] = useState<'berto' | 'five-brains'>('berto');
+  const [visibleRules, setVisibleRules] = useState<"berto" | "five-brains">(
+    "berto",
+  );
 
   const load = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/strategy-comparison', { credentials: 'include' });
-      if (!response.ok) throw new Error('Laboratorio strategie non disponibile.');
-      setSnapshot(await response.json() as Snapshot);
+      const response = await fetch("/api/strategy-comparison", {
+        credentials: "include",
+      });
+      if (!response.ok)
+        throw new Error("Laboratorio strategie non disponibile.");
+      setSnapshot((await response.json()) as Snapshot);
       setError(undefined);
     } catch (value) {
-      setError(value instanceof Error ? value.message : 'Errore caricamento confronto.');
+      setError(
+        value instanceof Error
+          ? value.message
+          : "Errore caricamento confronto.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
   const ai = snapshot.strategies.FIVE_BRAINS_STRATEGY;
   const berto = snapshot.strategies.BERTO_GOLDEN_SETUP;
   const rows: Array<[string, string, string]> = [
-    ['Capitale iniziale', money(ai.initialCapital), money(berto.initialCapital)],
-    ['Capitale finale', money(ai.finalCapital), money(berto.finalCapital)],
-    ['Rendimento netto', number(ai.netReturnPct, '%'), number(berto.netReturnPct, '%')],
-    ['Win rate', number(ai.winRatePct, '%'), number(berto.winRatePct, '%')],
-    ['Profit factor', number(ai.profitFactor), number(berto.profitFactor)],
-    ['Expectancy', number(ai.expectancyR, ' R'), number(berto.expectancyR, ' R')],
-    ['Max drawdown', number(ai.maxDrawdownPct, '%'), number(berto.maxDrawdownPct, '%')],
-    ['Trade chiusi', String(ai.closedTrades), String(berto.closedTrades)],
-    ['Costi + slippage', money(ai.totalCosts), money(berto.totalCosts)],
+    [
+      "Capitale iniziale",
+      money(ai.initialCapital),
+      money(berto.initialCapital),
+    ],
+    ["Capitale finale", money(ai.finalCapital), money(berto.finalCapital)],
+    [
+      "Rendimento netto",
+      number(ai.netReturnPct, "%"),
+      number(berto.netReturnPct, "%"),
+    ],
+    ["Win rate", number(ai.winRatePct, "%"), number(berto.winRatePct, "%")],
+    ["Profit factor", number(ai.profitFactor), number(berto.profitFactor)],
+    [
+      "Expectancy",
+      number(ai.expectancyR, " R"),
+      number(berto.expectancyR, " R"),
+    ],
+    [
+      "Max drawdown",
+      number(ai.maxDrawdownPct, "%"),
+      number(berto.maxDrawdownPct, "%"),
+    ],
+    ["Trade chiusi", String(ai.closedTrades), String(berto.closedTrades)],
+    ["Costi + slippage", money(ai.totalCosts), money(berto.totalCosts)],
   ];
   const rules = snapshot.bertoRules;
 
-  return <div className="content-wrap">
-    <PageHeader
-      eyebrow="STRATEGY COMPARISON LAB / SHADOW"
-      title="5 Cervelli vs Berto"
-      subtitle="Due strategie autonome, stesso capitale iniziale, stesso feed Axi e stesso periodo. Nessun segnale, veto o risultato passa da un motore all'altro."
-      action={<button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Aggiorna</button>}
-    />
-
-    {error && <div className="mb-4"><Notice tone="negative"><span>{error}</span></Notice></div>}
-    {snapshot.persistence?.status === 'degraded' && <div className="mb-4"><Notice tone="negative"><span><strong>Registro confronto non disponibile.</strong> {snapshot.persistence.message}</span></Notice></div>}
-    <Notice tone="teal"><span><strong>Separazione attiva.</strong> Portafogli, P&amp;L, drawdown, ordini virtuali e cronologie sono indipendenti. LIVE è disabilitato per entrambi.</span></Notice>
-
-    <div className="my-5 grid gap-4 lg:grid-cols-2">
-      <StrategyCard
-        title="5 Cervelli"
-        subtitle="STRATEGIA A · LOGICA AI"
-        status="SHADOW"
-        tone="positive"
-        metrics={ai}
-        description="Motore tecnico, macro, fondamentale, statistico e Risk Brain con parametri propri. Non usa livelli o conferme Berto."
+  return (
+    <div className="content-wrap">
+      <PageHeader
+        eyebrow="STRATEGY COMPARISON LAB / SHADOW"
+        title="5 Cervelli vs Berto"
+        subtitle="Due strategie autonome, stesso capitale iniziale, stesso feed Axi e stesso periodo. Nessun segnale, veto o risultato passa da un motore all'altro."
+        action={
+          <button
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Aggiorna
+          </button>
+        }
       />
-      <StrategyCard
-        title="Berto Golden Setup"
-        subtitle="STRATEGIA B · REGOLE FISSE"
-        status="REGOLE CARICATE"
-        tone="amber"
-        metrics={berto}
-        description="Segnale QQQ e livelli US500 deterministici. Non riceve punteggi, pesi, conferme o veto dai cinque cervelli."
-      />
-    </div>
 
-    <section className="mb-5 panel p-5 md:p-6">
-      <SectionLabel aside={<Badge tone="neutral"><FlaskConical size={11} /> STESSA BASE</Badge>}>Confronto affiancato</SectionLabel>
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full min-w-[620px] text-left text-xs">
-          <thead className="bg-secondary/45 text-muted-foreground"><tr><th className="px-4 py-3">Metrica</th><th className="px-4 py-3">5 Cervelli</th><th className="px-4 py-3">Berto</th></tr></thead>
-          <tbody>{rows.map(([metric, left, right]) => <tr key={metric} className="border-t border-border"><td className="px-4 py-3 font-semibold text-foreground">{metric}</td><td className="px-4 py-3 mono">{left}</td><td className="px-4 py-3 mono">{right}</td></tr>)}</tbody>
-        </table>
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">Nessun vincitore viene indicato prima di almeno {snapshot.minimumClosedTradesForReview} trade chiusi per strategia e di una verifica fuori campione.</p>
-    </section>
-
-    <section className="mb-5 panel p-5 md:p-6" aria-labelledby="rules-summary-title">
-      <fieldset className="mb-5">
-        <legend className="eyebrow mb-3">Riepilogo delle regole</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Strategia di cui leggere le regole">
-          {([
-            ['berto', 'REGOLE BERTO'],
-            ['five-brains', 'REGOLE 5 CERVELLI'],
-          ] as const).map(([value, label]) => (
-            <label key={value} className="relative cursor-pointer">
-              <input
-                type="radio"
-                name="visible-strategy-rules"
-                value={value}
-                checked={visibleRules === value}
-                onChange={() => setVisibleRules(value)}
-                aria-controls="strategy-rules-summary"
-                className="peer sr-only"
-              />
-              <span className="flex min-h-11 items-center justify-center rounded-md border border-border bg-background/45 px-4 py-3 text-center text-xs font-bold tracking-wide text-muted-foreground transition hover:border-primary/60 hover:text-foreground peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
-                {label}
-              </span>
-            </label>
-          ))}
+      {error && (
+        <div className="mb-4">
+          <Notice tone="negative">
+            <span>{error}</span>
+          </Notice>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">La scelta cambia solo questo riepilogo; risultati e modalità operative restano invariati.</p>
-      </fieldset>
-      <div id="strategy-rules-summary" aria-live="polite">
-        {visibleRules === 'berto' ? <>
-          <div id="rules-summary-title"><SectionLabel aside={<Badge tone="amber">V1.0 · BLOCCATA</Badge>}>Regole Berto implementate</SectionLabel></div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Rule icon={<TrendingUp size={15} />} title="Filtro QQQ" text="Opera solo se la candela regolare precedente è verde. Suffissi dai centesimi di Low e High." />
-            <Rule icon={<ArrowRightLeft size={15} />} title="Anti-clustering" text={`Distanza circolare < ${rules.suffixClusterDistance}: conserva soltanto il suffisso numericamente più basso.`} />
-            <Rule icon={<Target size={15} />} title="Livelli US500" text={`Solo livelli sotto l'open, griglia 100 pt, distanza minima ${rules.minimumDistancePoints} pt. Solo LONG.`} />
-            <Rule icon={<Clock3 size={15} />} title="Sessione New York" text={`${rules.sessionOpen}–09:59: tocchi invalidati. Entry da ${rules.entryWindowStart}. Chiusura ${rules.forcedExit}.`} />
-            <Rule icon={<ShieldCheck size={15} />} title="Primo tocco" text="Un livello può entrare una sola volta. Se toccato prima della finestra operativa resta escluso per tutta la giornata." />
-            <Rule icon={<TrendingDown size={15} />} title="Stop loss" text={`Entry − ${rules.stopLossPoints} punti, inclusivo del punto previsto per spread/slippage.`} />
-            <Rule icon={<TrendingUp size={15} />} title="Take profit" text={`Entry + ${rules.takeProfitPoints} punti. Nessun trailing o modifica da parte dell'AI.`} />
-            <Rule icon={<WalletCards size={15} />} title="Due letture rischio" text={`Originale Berto ${rules.originalRiskPerTradePct}%; confronto normalizzato ${rules.normalizedComparisonRiskPct}% per isolare la qualità dei segnali.`} />
-          </div>
-        </> : <>
-          <div id="rules-summary-title"><SectionLabel aside={<Badge tone="teal">SOLO INFORMATIVO</Badge>}>Regole 5 Cervelli</SectionLabel></div>
-          <p className="mb-4 text-xs leading-relaxed text-muted-foreground">Il motore riceve segnali tecnici e macro/news con punteggio e confidenza; valuta separatamente i dati fondamentali e statistici quando disponibili. Questo riepilogo non invia segnali né cambia le regole.</p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <Rule icon={<TrendingUp size={15} />} title="ANALISI TECNICA" text="Considera il segnale tecnico disponibile su struttura del prezzo, trend, momentum e volatilità. Le conferme multi-timeframe dipendono dai dati del segnale; il Master Decision Engine ne riceve punteggio e confidenza, senza ricalcolare gli indicatori." />
-            <Rule icon={<WalletCards size={15} />} title="ANALISI FONDAMENTALE" text="Valuta prezzo, utili, crescita, margini, redditività e debito quando presenti. Le metriche assenti non vengono inventate: quelle disponibili sono normalizzate e la copertura determina la confidenza." />
-            <Rule icon={<Clock3 size={15} />} title="MACRO" text="Il motore usa il segnale aggregato macro/news; eventi ad alto impatto imminenti riducono la size. Shock sistemici e condizioni estreme di volatilità possono attivare i guardrail di sicurezza." />
-            <Rule icon={<CheckCircle2 size={15} />} title="NEWS" text="Il flusso di verifica considera fonti autorizzate, date e corrispondenze dirette tra notizie. Dati mancanti o degradati, duplicati e notizie in conflitto non sono presentati come conferme certe; al motore arriva il segnale macro/news aggregato." />
-            <Rule icon={<ShieldCheck size={15} />} title="RISCHIO" text="Controlla perdita giornaliera, drawdown, qualità del feed, connessione broker, spread, slippage e volatilità. Correlazione elevata e Risk Brain riducono la size; i limiti condivisi di rischio per trade, esposizione e numero di posizioni sono verificati nel controllo delle modalità." />
-          </div>
-          <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
-            <h3 className="display mb-2 text-base font-bold text-foreground">Come nasce la decisione</h3>
-            <p className="text-xs leading-relaxed text-muted-foreground">Le analisi restano separate: il Master Decision Engine combina i punteggi disponibili di tecnica, macro/news, fondamentale e statistica con pesi diversi per orizzonte. Se un segnale opzionale manca, rinormalizza i pesi degli altri invece di bloccare automaticamente l’operazione. I guardrail di rischio possono ridurre punteggio e size oppure imporre NO_TRADE; senza punteggi disponibili la decisione è WAIT. Il contesto istituzionale resta SHADOW e non influisce sulla decisione. Operatività solo PAPER/SHADOW: LIVE disabilitato.</p>
-          </div>
-        </>}
-      </div>
-    </section>
+      )}
+      {snapshot.persistence?.status === "degraded" && (
+        <div className="mb-4">
+          <Notice tone="negative">
+            <span>
+              <strong>Registro confronto non disponibile.</strong>{" "}
+              {snapshot.persistence.message}
+            </span>
+          </Notice>
+        </div>
+      )}
+      <Notice tone="teal">
+        <span>
+          <strong>Separazione attiva.</strong> Portafogli, P&amp;L, drawdown,
+          ordini virtuali e cronologie sono indipendenti. LIVE è disabilitato
+          per entrambi.
+        </span>
+      </Notice>
 
-    <section className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-xl border border-border bg-card/60 p-5">
-        <div className="mb-4 flex items-center gap-2"><Bot size={17} className="text-primary" /><h3 className="display text-lg font-bold">Isolamento decisionale</h3></div>
-        <Check text="I cinque cervelli non vedono livelli, trade o risultati Berto." />
-        <Check text="Berto non usa punteggi, confidenza, pesi o Risk Brain AI." />
-        <Check text="I portafogli virtuali partono dallo stesso capitale." />
-        <Check text="Ogni operazione conserva strategyId, costi e slippage propri." />
+      <div className="my-5 grid gap-4 lg:grid-cols-2">
+        <StrategyCard
+          title="5 Cervelli"
+          subtitle="STRATEGIA A · LOGICA AI"
+          status="SHADOW"
+          tone="positive"
+          metrics={ai}
+          description="Motore tecnico, macro, fondamentale, statistico e Risk Brain con parametri propri. Non usa livelli o conferme Berto."
+        />
+        <StrategyCard
+          title="Berto Breakout QQQ v4.50"
+          subtitle="STRATEGIA B · REGOLE FISSE"
+          status="REGOLE CARICATE"
+          tone="amber"
+          metrics={berto}
+          description="Segnale QQQ e livelli US500 deterministici. Non riceve punteggi, pesi, conferme o veto dai cinque cervelli."
+        />
       </div>
-      <div className="rounded-xl border border-border bg-card/60 p-5">
-        <div className="mb-4 flex items-center gap-2"><ShieldCheck size={17} className="text-accent" /><h3 className="display text-lg font-bold">Barriere operative</h3></div>
-        <Check text="Modalità SHADOW e executionEnabled=false hardcoded." />
-        <Check text="Nessuna posizione overnight: uscita temporale obbligatoria." />
-        <Check text="Il confronto osserva i risultati ma non seleziona automaticamente il LIVE." />
-        <Check text="Dati insufficienti restano indicati come tali, senza valori inventati." />
-      </div>
-    </section>
-  </div>;
+
+      <section className="mb-5 panel p-5 md:p-6">
+        <SectionLabel
+          aside={
+            <Badge tone="neutral">
+              <FlaskConical size={11} /> STESSA BASE
+            </Badge>
+          }
+        >
+          Confronto affiancato
+        </SectionLabel>
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full min-w-[620px] text-left text-xs">
+            <thead className="bg-secondary/45 text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Metrica</th>
+                <th className="px-4 py-3">5 Cervelli</th>
+                <th className="px-4 py-3">Berto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([metric, left, right]) => (
+                <tr key={metric} className="border-t border-border">
+                  <td className="px-4 py-3 font-semibold text-foreground">
+                    {metric}
+                  </td>
+                  <td className="px-4 py-3 mono">{left}</td>
+                  <td className="px-4 py-3 mono">{right}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Nessun vincitore viene indicato prima di almeno{" "}
+          {snapshot.minimumClosedTradesForReview} trade chiusi per strategia e
+          di una verifica fuori campione.
+        </p>
+      </section>
+
+      <section
+        className="mb-5 panel p-5 md:p-6"
+        aria-labelledby="rules-summary-title"
+      >
+        <fieldset className="mb-5">
+          <legend className="eyebrow mb-3">Riepilogo delle regole</legend>
+          <div
+            className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            aria-label="Strategia di cui leggere le regole"
+          >
+            {(
+              [
+                ["berto", "REGOLE BERTO"],
+                ["five-brains", "REGOLE 5 CERVELLI"],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value} className="relative cursor-pointer">
+                <input
+                  type="radio"
+                  name="visible-strategy-rules"
+                  value={value}
+                  checked={visibleRules === value}
+                  onChange={() => setVisibleRules(value)}
+                  aria-controls="strategy-rules-summary"
+                  className="peer sr-only"
+                />
+                <span className="flex min-h-11 items-center justify-center rounded-md border border-border bg-background/45 px-4 py-3 text-center text-xs font-bold tracking-wide text-muted-foreground transition hover:border-primary/60 hover:text-foreground peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
+                  {label}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            La scelta cambia solo questo riepilogo; risultati e modalità
+            operative restano invariati.
+          </p>
+        </fieldset>
+        <div id="strategy-rules-summary" aria-live="polite">
+          {visibleRules === "berto" ? (
+            <>
+              <div id="rules-summary-title">
+                <SectionLabel
+                  aside={<Badge tone="amber">V{rules.version} · SHADOW</Badge>}
+                >
+                  Regole Berto implementate
+                </SectionLabel>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Rule
+                  icon={<TrendingUp size={15} />}
+                  title="Direzione QQQ"
+                  text="Candela precedente verde: solo LONG. Rossa: solo SHORT. Doji: nessun trade. Suffissi dai centesimi di Low e High."
+                />
+                <Rule
+                  icon={<ArrowRightLeft size={15} />}
+                  title="Anti-clustering"
+                  text={`Distanza circolare < ${rules.suffixClusterDistance}: suffisso più basso nei LONG, più alto negli SHORT.`}
+                />
+                <Rule
+                  icon={<Target size={15} />}
+                  title="Livelli e breakout"
+                  text={`Griglia US500 ogni 100 pt, entro ±${rules.maximumDistanceFromOpenPoints} dall'open. Dopo il primo tocco, ingresso a ±${rules.breakoutPoints}.`}
+                />
+                <Rule
+                  icon={<Clock3 size={15} />}
+                  title="Sessione New York"
+                  text={`Da ${rules.sessionOpen}; primo minuto scartato. Chiusura ${rules.regularForcedExit}, oppure ${rules.halfDayForcedExit} nelle mezze giornate.`}
+                />
+                <Rule
+                  icon={<ShieldCheck size={15} />}
+                  title="Filtri ingresso"
+                  text={`Range precedente < ${rules.maximumPreviousRangePct}%. Spread ≤ ${rules.maximumSpreadPoints} pt e inseguimento massimo ${rules.maximumChasePoints} pt.`}
+                />
+                <Rule
+                  icon={<TrendingDown size={15} />}
+                  title="Stop iniziale"
+                  text={`${rules.initialStopPoints} punti dall'ingresso. Un solo trade per livello e nessuna posizione overnight.`}
+                />
+                <Rule
+                  icon={<TrendingUp size={15} />}
+                  title="Trailing M1"
+                  text={`Nessun TP fisso. Trailing ${rules.trailingDistancePoints} pt sulle candele M1 chiuse, attivo oltre +${rules.trailingActivationFromLevelPoints} pt dal livello.`}
+                />
+                <Rule
+                  icon={<WalletCards size={15} />}
+                  title="Rischio autonomo"
+                  text={`${rules.riskPerTradePct}% del saldo Berto per trade; partenza prudente indicata ${rules.prudentStartingRiskPct}%. Size indipendente dai 5 Cervelli.`}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div id="rules-summary-title">
+                <SectionLabel
+                  aside={<Badge tone="teal">SOLO INFORMATIVO</Badge>}
+                >
+                  Regole 5 Cervelli
+                </SectionLabel>
+              </div>
+              <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                Il motore riceve segnali tecnici e macro/news con punteggio e
+                confidenza; valuta separatamente i dati fondamentali e
+                statistici quando disponibili. Questo riepilogo non invia
+                segnali né cambia le regole.
+              </p>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <Rule
+                  icon={<TrendingUp size={15} />}
+                  title="ANALISI TECNICA"
+                  text="Considera il segnale tecnico disponibile su struttura del prezzo, trend, momentum e volatilità. Le conferme multi-timeframe dipendono dai dati del segnale; il Master Decision Engine ne riceve punteggio e confidenza, senza ricalcolare gli indicatori."
+                />
+                <Rule
+                  icon={<WalletCards size={15} />}
+                  title="ANALISI FONDAMENTALE"
+                  text="Valuta prezzo, utili, crescita, margini, redditività e debito quando presenti. Le metriche assenti non vengono inventate: quelle disponibili sono normalizzate e la copertura determina la confidenza."
+                />
+                <Rule
+                  icon={<Clock3 size={15} />}
+                  title="MACRO"
+                  text="Il motore usa il segnale aggregato macro/news; eventi ad alto impatto imminenti riducono la size. Shock sistemici e condizioni estreme di volatilità possono attivare i guardrail di sicurezza."
+                />
+                <Rule
+                  icon={<CheckCircle2 size={15} />}
+                  title="NEWS"
+                  text="Il flusso di verifica considera fonti autorizzate, date e corrispondenze dirette tra notizie. Dati mancanti o degradati, duplicati e notizie in conflitto non sono presentati come conferme certe; al motore arriva il segnale macro/news aggregato."
+                />
+                <Rule
+                  icon={<ShieldCheck size={15} />}
+                  title="RISCHIO"
+                  text="Controlla perdita giornaliera, drawdown, qualità del feed, connessione broker, spread, slippage e volatilità. Correlazione elevata e Risk Brain riducono la size; i limiti condivisi di rischio per trade, esposizione e numero di posizioni sono verificati nel controllo delle modalità."
+                />
+              </div>
+              <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
+                <h3 className="display mb-2 text-base font-bold text-foreground">
+                  Come nasce la decisione
+                </h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Le analisi restano separate: il Master Decision Engine combina
+                  i punteggi disponibili di tecnica, macro/news, fondamentale e
+                  statistica con pesi diversi per orizzonte. Se un segnale
+                  opzionale manca, rinormalizza i pesi degli altri invece di
+                  bloccare automaticamente l’operazione. I guardrail di rischio
+                  possono ridurre punteggio e size oppure imporre NO_TRADE;
+                  senza punteggi disponibili la decisione è WAIT. Il contesto
+                  istituzionale resta SHADOW e non influisce sulla decisione.
+                  Operatività solo PAPER/SHADOW: LIVE disabilitato.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-border bg-card/60 p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Bot size={17} className="text-primary" />
+            <h3 className="display text-lg font-bold">
+              Isolamento decisionale
+            </h3>
+          </div>
+          <Check text="I cinque cervelli non vedono livelli, trade o risultati Berto." />
+          <Check text="Berto non usa punteggi, confidenza, pesi o Risk Brain AI." />
+          <Check text="I portafogli virtuali partono dallo stesso capitale." />
+          <Check text="Ogni operazione conserva strategyId, costi e slippage propri." />
+        </div>
+        <div className="rounded-xl border border-border bg-card/60 p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <ShieldCheck size={17} className="text-accent" />
+            <h3 className="display text-lg font-bold">Barriere operative</h3>
+          </div>
+          <Check text="Modalità SHADOW e executionEnabled=false hardcoded." />
+          <Check text="Nessuna posizione overnight: uscita temporale obbligatoria." />
+          <Check text="Il confronto osserva i risultati ma non seleziona automaticamente il LIVE." />
+          <Check text="Dati insufficienti restano indicati come tali, senza valori inventati." />
+        </div>
+      </section>
+    </div>
+  );
 }
 
-function Rule({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return <div className="rounded-lg border border-border bg-background/35 p-4"><div className="mb-2 flex items-center gap-2 text-primary">{icon}<strong className="text-xs text-foreground">{title}</strong></div><p className="text-[11px] leading-relaxed text-muted-foreground">{text}</p></div>;
+function Rule({
+  icon,
+  title,
+  text,
+}: {
+  icon: ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-background/35 p-4">
+      <div className="mb-2 flex items-center gap-2 text-primary">
+        {icon}
+        <strong className="text-xs text-foreground">{title}</strong>
+      </div>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        {text}
+      </p>
+    </div>
+  );
 }
 
 function Check({ text }: { text: string }) {
-  return <div className="mb-2 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-accent" /><span>{text}</span></div>;
+  return (
+    <div className="mb-2 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+      <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-accent" />
+      <span>{text}</span>
+    </div>
+  );
 }

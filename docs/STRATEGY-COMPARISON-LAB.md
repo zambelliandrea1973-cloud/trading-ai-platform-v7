@@ -19,30 +19,28 @@ Feed Axi normalizzato
 metriche A + metriche B ─> dashboard di osservazione (nessun feedback ai motori)
 ```
 
-## Berto Golden Setup 1.0.0
+## Berto Breakout QQQ 4.50.0
 
-- Segnale: candela regolare QQQ del giorno precedente.
-- Se `close <= open`: giornata sospesa.
-- Suffissi: centesimi del Low e dell'High.
-- Distanza circolare: `min(abs(A-B), 100-abs(A-B))`.
-- Se distanza < 10: conserva il suffisso numericamente inferiore.
-- Livelli: suffissi proiettati sulla griglia US500 ogni 100 punti.
-- Solo livelli sotto il Session Open e distanti almeno 20 punti.
-- Fuso canonico: `America/New_York`.
-- 09:30–09:59 ET: ogni primo tocco invalida il livello per la giornata.
-- Da 10:00 ET: primo tocco valido, solo LONG.
-- Stop loss: 31 punti.
-- Take profit: 89 punti.
-- Alle 15:55 ET: chiusura di posizioni e scadenza degli ordini.
-- Overnight vietato.
-- Rischio originale osservato: 5% per trade.
-- Confronto normalizzato: 0,5% per trade.
+- Segnale: candela QQQ del giorno di borsa precedente; verde = LONG, rossa = SHORT, doji = nessun trade.
+- Suffissi: centesimi del Low e dell'High, con distanza circolare `min(abs(A-B), 100-abs(A-B))`.
+- Se la distanza è < 10: conserva il suffisso inferiore nei LONG e quello superiore negli SHORT.
+- Livelli: griglia US500 ogni 100 punti, soltanto entro 50 punti dal Session Open.
+- Filtro volatilità fail-closed: range completo della precedente sessione USA < 1,3% della chiusura.
+- Fuso canonico: `America/New_York`; 09:30 ET–15:55 ET, oppure 12:55 ET nelle mezze giornate.
+- Il tocco nella candela M1 delle 09:30 scarta il livello; i tocchi successivi devono arrivare dal lato coerente con la direzione QQQ.
+- Ingresso stop a 8 punti dal livello; inseguimento massimo 2 punti e spread massimo 2 punti.
+- Stop iniziale: 13 punti dall'ingresso. Nessun take profit fisso.
+- Trailing sulle candele M1 chiuse: 25 punti dal massimo/minimo; si attiva oltre 20 punti dal livello e migliora di almeno 0,2 punti.
+- Un trade per livello; chiusura forzata e cancellazione dei setup a fine sessione; overnight vietato.
+- Size autonoma: 2% del saldo Berto per trade, con 1% indicato come partenza prudente e massimo 50 lotti.
+- Dopo una riconnessione l'adapter attende 90 secondi, ricostruisce la giornata e non insegue breakout già avvenuti.
+- Festività e mezze giornate sono input di sessione versionati: in assenza di calendario valido il sistema deve bloccarsi.
 - Modalità: SHADOW; esecuzione reale impossibile.
 
 ## API
 
 - `GET /api/strategy-comparison`: contratto del laboratorio, capitale comune e metriche.
-- `POST /api/strategy-comparison/berto/plan`: calcola il piano giornaliero Berto da OHLC QQQ e Session Open US500.
+- `POST /api/strategy-comparison/berto/plan`: calcola il piano giornaliero da OHLC QQQ, Session Open US500, range USA precedente e tipo di sessione.
 
 Esempio body:
 
@@ -50,7 +48,14 @@ Esempio body:
 {
   "qqq": { "open": 724, "high": 737.62, "low": 724.18, "close": 735 },
   "sp500SessionOpen": 7529.55,
-  "depth": 8
+  "previousSession": {
+    "high": 5020,
+    "low": 4980,
+    "close": 5000,
+    "complete": true
+  },
+  "sessionKind": "REGULAR",
+  "depth": 10
 }
 ```
 
